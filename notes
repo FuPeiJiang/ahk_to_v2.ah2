@@ -1,0 +1,79 @@
+
+loop {
+    statement
+}
+
+statement can be:
+
+directive, command, function call, function definition, it's so very messed up it's impossible
+group, assignment ++v, unary minus -2, *2 is also not an error
+hotkey, label, hotstring
+if, while, for, loop,
+{} block
+
+++var
+
+(var && func())
+() is a group (for expression)
+an assignment is also an expression...
+so assignments don't actually exist ?
+well an expression can be assignment or operation
+so only assignment or operation exists, but expression doesn't.
+
+MsgBox % a:=2
+
+it's impossible to branch out...
+
+
+(
++
+-
+{
+
+
+你:=1
+(你 && foo())
+
+oh please
+https://www.autohotkey.com/board/topic/98444-test-if-string-has-any-illegal-characters-for-a-variable-name/#post_id_619506
+
+[a-zA-Z0-9_#@$\x80-\x{10ffff}]
+
+if you thought you were good at branching out, here's the real challenge
+
+if start with #, followed by a (,|\s|$)
+#SingleInstance:=1
+
+a functiion call, command, directive
+has an array of arguments
+delimited by comma, there may be a starting comma for command and directive..
+do I put whitespaces in the array ? I probably shouldn't even put commas in the array
+
+build the structure the way you want to use it
+I'm just walking through
+
+ok, so I only want to replace functions with their v2 equivalent, removing leading comma, percent
+I think you can do that with simple regex, I don't even know what to convert lmao
+
+remove directives
+functions: just like regex, the parameters, but what about array access ?
+a" "var%b to "a" var "b"
+just replace every % with " "
+
+completely forget the parser part, it is completely not useful
+
+comments can count as skip whitespace I guess
+I'll have to regex it.
+
+let's say we are at directive, before \s
+how do we branch out ?
+it could just be a comment, or arg, or a comma on next line, we, will never know.
+this is insanely hard to branch out.
+it can branch out to +2, -2,
+
+but -2 by itself is legal
+unary minus
+
+skip_command
+,
+%
