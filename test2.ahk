@@ -7,6 +7,7 @@
 ; #KeyHistory 0
 
 var:={}
+var:={a:23}
 var.a:=0
 MsgBox % (var).a
 

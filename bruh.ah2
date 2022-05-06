@@ -452,26 +452,66 @@ AHK_parse(str) {
 AHK_parse(FileRead("test2.ahk"))
 ; AHK_parse(FileRead("concat.ahk"))
 ; AHK_parse(FileRead("object.ahk"))
-d bruhArr
+; d bruhArr
 
-finalStr:=""
-for v_ in bruhArr {
-    switch v_.type {
-        case "command":
-            if (v_.args.Length) {
-                finalStr.=v_._name " " v_.args[1]
-                i_:=2, len:=v_.args.Length + 1
-                while (i_<len) {
-                    finalStr.=", " v_.args[i_]
-                    i_++
+what() {
+    finalStr:=""
+    for v_ in bruhArr {
+        finalStr.=do(v_) "`n"
+    }
+    return finalStr
+
+    do(v_) {
+        if (Type(v_)=="String") {
+            return v_
+        }
+        switch v_.type {
+            case "command":
+                if (v_.args.Length) {
+                    finalStr.=v_._name " " do(v_.args[1])
+                    i_:=2, len:=v_.args.Length + 1
+                    while (i_<len) {
+                        finalStr.=", " do(v_.args[i_])
+                        i_++
+                    }
+                } else {
+                    finalStr.=v_._name
                 }
-                finalStr.="`n"
-            } else {
-                finalStr.=v_._name "`n"
+            case "property access":
+                return do(v_.parent) "." v_.propName
+            case "group":
+                return "(" do(v_.value) ")"
+            case "unary":
+                return v_.op do(v_.right)
+            case "binary":
+                return do(v_.left) " " v_.op " " do(v_.right)
+            case "function call":
+                argsStr:=""
+                if (v_.args.Length) {
+                    argsStr.=v_._name " " do(v_.args[1])
+                    i_:=2, len:=v_.args.Length + 1
+                    while (i_<len) {
+                        argsStr.=", " do(v_.args[i_])
+                        i_++
+                    }
+                }
+                return do(v_.func) "(" argsStr ")"
+            case "object":
+                argsStr:=""
+                if (v_.keys.Length) {
+                    argsStr.=do(v_.keys[1]) ":" do(v_.values[1])
+                    i_:=2, len:=v_.keys.Length + 1
+                    while (i_<len) {
+                        argsStr.=", " do(v_.keys[i_]) ":" do(v_.values[i_])
+                        i_++
+                    }
+                }
+                return "{" argsStr "}"
             }
     }
 }
-A_Clipboard:=finalStr
+
+A_Clipboard:=what()
 
 return
 
