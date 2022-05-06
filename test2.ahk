@@ -14,17 +14,17 @@ SetBatchLines -1
 ; msgbox
 ; +2+2
 ;
-if:=1
-if&=111
-msgbox
--=2345
-MsgBox % msgbox
+; if:=1
+; if&=111
+; msgbox
+; -=2345
+; MsgBox % msgbox
 ;
 ; foo() {
     ; MsgBox % a??a
 ; }
 ;
-; (#SingleInstance && foo())
+(#SingleInstance && foo())
 
    /* a
    */

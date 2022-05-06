@@ -362,36 +362,56 @@ AHK_parse(str) {
                 c_+=OutputVar_variableName.Len
                 left:=OutputVar_variableName.0
         }
-        char_:=SubStr(str, c_, 1)
-        switch char_ {
-            case '(':
-                ; function call
-            case '.':
-                ; property
-            default:
-                skip_comments()
-                char_:=SubStr(str, c_, 1)
-                switch char_ {
-                    case "+", "-", ":", "&", "*", ".", "<", ">", "=", "^", "/", "|":
-                        RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
-                        c_+=OutputVar_operator.Len
-                        skip_comments()
-                        ; binary operation
-                        ; if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
-                            ; return {type: "assignment", op: OutputVar_operator.0, left:left, right: skip_expression()}
-                        ; } else {
-                            return {type: "binary", op: OutputVar_operator.0, left:left, right: skip_expression()}
-                        ; }
-                    case ",", "":
-                        return left
-                    default:
-                        if (InStr(OutputVar_comments.0, "`n", true)) {
-                            return left
-                        } else {
-                            return {type: "concat", op: OutputVar_comments.0, left:left, right: skip_expression()}
+        loop {
+            char_:=SubStr(str, c_, 1)
+            switch char_ {
+                case '(':
+                    ; function call
+                    c_++
+                    skip_comments()
+                    args:=[]
+                    loop {
+                        char_:=SubStr(str, c_, 1)
+                        switch char_ {
+                            case ")":
+                                left:={type: "function call", func: left, args: args}
+                                c_++
+                                break
+                            case ",":
+                                c_++
+                                skip_comments()
                         }
-                }
+                        args.Push(skip_expression())
+                    }
+                case '.':
+                    ; property
+                default:
+                    skip_comments()
+                    char_:=SubStr(str, c_, 1)
+                    switch char_ {
+                        case "+", "-", ":", "&", "*", ".", "<", ">", "=", "^", "/", "|":
+                            RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
+                            c_+=OutputVar_operator.Len
+                            skip_comments()
+                            ; binary operation
+                            ; if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
+                                ; return {type: "assignment", op: OutputVar_operator.0, left:left, right: skip_expression()}
+                            ; } else {
+                                return {type: "binary", op: OutputVar_operator.0, left:left, right: skip_expression()}
+                            ; }
+                        case ",", "":
+                            return left
+                        default:
+                            if (!OutputVar_comments.0) {
+                                return left
+                            } else if (InStr(OutputVar_comments.0, "`n", true)) {
+                                return left
+                            } else {
+                                return {type: "concat", op: OutputVar_comments.0, left:left, right: skip_expression()}
+                            }
+                    }
 
+            }
         }
     }
 }
@@ -399,8 +419,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
 ; AHK_parse(FileRead("MsgBox_Insane.ahk"))
-; AHK_parse(FileRead("test2.ahk"))
-AHK_parse(FileRead("concat.ahk"))
+AHK_parse(FileRead("test2.ahk"))
+; AHK_parse(FileRead("concat.ahk"))
 d bruhArr
 
 finalStr:=""
