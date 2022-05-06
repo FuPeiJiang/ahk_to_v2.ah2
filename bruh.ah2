@@ -404,8 +404,14 @@ AHK_parse(str) {
                         }
                         args.Push(skip_expression())
                     }
+                case '[':
+                    ; array access
                 case '.':
-                    ; property
+                    ; property access
+                    c_++
+                    RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
+                    c_+=OutputVar_variableName.Len
+                    left:={type: "property access", parent: left, propName: OutputVar_variableName.0}
                 default:
                     skip_comments()
                     char_:=SubStr(str, c_, 1)
@@ -443,9 +449,9 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
 ; AHK_parse(FileRead("MsgBox_Insane.ahk"))
-; AHK_parse(FileRead("test2.ahk"))
+AHK_parse(FileRead("test2.ahk"))
 ; AHK_parse(FileRead("concat.ahk"))
-AHK_parse(FileRead("object.ahk"))
+; AHK_parse(FileRead("object.ahk"))
 d bruhArr
 
 finalStr:=""
