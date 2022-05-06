@@ -5,3 +5,8 @@ SendMode Input  ; Recommended for new scripts due to its superior speed and reli
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 SetBatchLines -1
 #KeyHistory 0
+
+foo() {
+    MsgBox 1
+}
+foo()

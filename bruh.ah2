@@ -168,6 +168,11 @@ AHK_parse(str) {
                         char_:=SubStr(str, c_ + 1, 1)
                         if (char_~="\s") {
                             ; expression
+                            c_+=2
+                            toPush:=skip_expression()
+                            if (InStr(OutputVar_comments.0, "`n", true)) {
+                                break
+                            }
                         } else {
                             ; v1str MsgBox %var%
                             skip_v1str_noNeedToEscapeComma()
@@ -189,12 +194,12 @@ AHK_parse(str) {
 
                 cBak:=c_
                 skip_v1str_commaDelim()
-                if (OutputVar_v1str.0~="^(?!\.$)\d*(?:\.\d*)?$") {
+                if (OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$") {
                     toPush:=OutputVar_v1str.0
                 } else if (argsArr.Length==1 || argsArr.Length==2) {
                     toPush:=v1str_to_expression(OutputVar_v1str.0)
                     cLoL:=cBak
-                } else if (argsArr.Length==3 && !(OutputVar_v1str.0~="^(?!\.$)\d*(?:\.\d*)?$")) {
+                } else if (argsArr.Length==3 && !(OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$")) {
                     c_:=cLoL
                     skip_v1str_noNeedToEscapeComma()
                     toPush:=v1str_to_expression(OutputVar_v1str.0)
@@ -257,7 +262,19 @@ AHK_parse(str) {
                     case 3:
                         argsArr:=[argsArr[3], argsArr[2], "`"" argsArr[1] "`""]
                     case 4:
-                        argsArr:=[argsArr[3], argsArr[2], "`"" argsArr[1] " T" argsArr[4] "`""]
+                        if (argsArr[1]~="^(?![.+]$)\+?\d*(?:\.\d*)?$") {
+                            if (argsArr[4]~="^(?![.+]$)\+?\d*(?:\.\d*)?$") {
+                                argsArr:=[argsArr[3], argsArr[2], "`"" argsArr[1] " T" argsArr[4] "`""]
+                            } else {
+                                argsArr:=[argsArr[3], argsArr[2], "`"" argsArr[1] " T`" " argsArr[4]]
+                            }
+                        } else {
+                            if (argsArr[4]~="^(?![.+]$)\+?\d*(?:\.\d*)?$") {
+                                argsArr:=[argsArr[3], argsArr[2], argsArr[1] " `" T " argsArr[4] "`""]
+                            } else {
+                                argsArr:=[argsArr[3], argsArr[2], argsArr[1] " `" T`" " argsArr[4]]
+                            }
+                        }
                 }
                 bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
             default:
@@ -287,11 +304,50 @@ AHK_parse(str) {
         RegExMatch(str, "\S+(?:[ \t]+[^; \t]\S*)*", &OutputVar_v1str, c_)
         c_+=OutputVar_v1str.Len
     }
+
+    skip_expression() {
+        ; variable, string, number, function call, array access, property access
+        ; object literal, array literal
+        ; ++assignment
+        ; -unary minus
+
+        char_:=SubStr(str, c_, 1)
+        switch char_ {
+            case "{":
+            case "[":
+            case "+", "-":
+            default:
+                RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
+                c_+=OutputVar_variableName.Len
+                char_:=SubStr(str, c_, 1)
+                switch char_ {
+                    case '(':
+                        ; function call
+                    case '.':
+                        ; property
+                    default:
+                        skip_comments()
+                        char_:=SubStr(str, c_, 1)
+                        switch char_ {
+                            case '+', '-':
+                                ; operator
+                            case ',', '':
+                                return OutputVar_variableName.0
+                            default:
+                                if (InStr(OutputVar_comments.0, "`n", true)) {
+                                    return OutputVar_variableName.0
+                                }
+                        }
+
+                }
+
+        }
+    }
 }
 
 ; AHK_parse(FileRead("test.ahk"))
 AHK_parse(FileRead("MsgBox.ahk"))
-d bruhArr
+; d bruhArr
 
 finalStr:=""
 for v_ in bruhArr {
