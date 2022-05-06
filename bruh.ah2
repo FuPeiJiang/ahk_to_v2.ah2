@@ -188,12 +188,12 @@ AHK_parse(str) {
 
                 cBak:=c_
                 skip_v1str_commaDelim()
-                if (OutputVar_v1str.0~="\+?\d+|^$") {
+                if (OutputVar_v1str.0~="^(?!\.$)\d*(?:\.\d*)?$") {
                     toPush:=OutputVar_v1str.0
                 } else if (argsArr.Length==1 || argsArr.Length==2) {
                     toPush:=v1str_to_expression(OutputVar_v1str.0)
                     cLoL:=cBak
-                } else if (argsArr.Length==3 && !(OutputVar_v1str.0~="\+?\d+|^$")) {
+                } else if (argsArr.Length==3 && !(OutputVar_v1str.0~="^(?!\.$)\d*(?:\.\d*)?$")) {
                     c_:=cLoL
                     skip_v1str_noNeedToEscapeComma()
                     toPush:=v1str_to_expression(OutputVar_v1str.0)
