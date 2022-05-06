@@ -347,6 +347,11 @@ AHK_parse(str) {
             case "[":
                 ; array literal
                 ; left:=OutputVar_variableName
+            case "`"":
+                RegExMatch(str, "`"(?:`"`"|[^`"])*`"", &OutputVar_stringLiteral, c_)
+                c_+=OutputVar_stringLiteral.Len
+                left:=RegExReplace(OutputVar_stringLiteral.0, "`"`"", "```"")
+                ; string literal
             case "+", "-":
                 RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar, c_)
                 c_+=OutputVar.Len
@@ -370,6 +375,7 @@ AHK_parse(str) {
                     case "+", "-", ":", "&", "*", ".", "<", ">", "=", "^", "/", "|":
                         RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
                         c_+=OutputVar_operator.Len
+                        skip_comments()
                         ; binary operation
                         ; if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
                             ; return {type: "assignment", op: OutputVar_operator.0, left:left, right: skip_expression()}
@@ -381,6 +387,8 @@ AHK_parse(str) {
                     default:
                         if (InStr(OutputVar_comments.0, "`n", true)) {
                             return left
+                        } else {
+                            return {type: "concat", op: OutputVar_comments.0, left:left, right: skip_expression()}
                         }
                 }
 
@@ -391,7 +399,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
 ; AHK_parse(FileRead("MsgBox_Insane.ahk"))
-AHK_parse(FileRead("test2.ahk"))
+; AHK_parse(FileRead("test2.ahk"))
+AHK_parse(FileRead("concat.ahk"))
 d bruhArr
 
 finalStr:=""
