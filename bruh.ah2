@@ -102,7 +102,7 @@ AHK_parse(str) {
                     case "(", "[", '.':
                         ; function call, array access, property
                         c_:=c1
-                        skip_expression()
+                        bruhArr.Push(skip_expression())
                     default:
                         ;assignment
                         c_:=c1
@@ -343,7 +343,28 @@ AHK_parse(str) {
                 c_++
             case "{":
                 ; object literal
-                ; left:=OutputVar_variableName
+                c_++
+                skip_comments()
+                keys:=[]
+                values:=[]
+                loop {
+                    char_:=SubStr(str, c_, 1)
+                        switch char_ {
+                            case "}":
+                                left:={type: "object", keys: keys, values: values}
+                                c_++
+                                break
+                            case ":":
+                                c_++
+                                skip_comments()
+                                values.Push(skip_expression())
+                                continue
+                            case ",":
+                                c_++
+                                skip_comments()
+                        }
+                    keys.Push(skip_expression())
+                }
             case "[":
                 ; array literal
                 ; left:=OutputVar_variableName
@@ -391,6 +412,9 @@ AHK_parse(str) {
                     switch char_ {
                         case "+", "-", ":", "&", "*", ".", "<", ">", "=", "^", "/", "|":
                             RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
+                            if (OutputVar_operator.0==":") {
+                                return left
+                            }
                             c_+=OutputVar_operator.Len
                             skip_comments()
                             ; binary operation
@@ -419,8 +443,9 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
 ; AHK_parse(FileRead("MsgBox_Insane.ahk"))
-AHK_parse(FileRead("test2.ahk"))
+; AHK_parse(FileRead("test2.ahk"))
 ; AHK_parse(FileRead("concat.ahk"))
+AHK_parse(FileRead("object.ahk"))
 d bruhArr
 
 finalStr:=""
