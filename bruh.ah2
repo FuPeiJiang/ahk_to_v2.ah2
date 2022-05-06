@@ -86,8 +86,12 @@ AHK_parse(str) {
                                 ; if skipped a line, it's another statement now
                                 ; if didn't skip a line, it's args...
                                 if (InStr(OutputVar_comments.0, "`n", true)) {
-                                    bruhArr.Push({_name:OutputVar_varName.0,args:[]})
-                                    continue statements_loop
+                                    if (RegExMatch(str, "(*COMMIT)(?i)(?:or|and)", &OutputVar_operator, c_)) {
+                                        skip_commandArgs()
+                                    } else {
+                                        bruhArr.Push({_name:OutputVar_varName.0,args:[]})
+                                        continue statements_loop
+                                    }
                                 } else {
                                     skip_commandArgs()
                                 }
@@ -330,6 +334,10 @@ AHK_parse(str) {
             case "{":
             case "[":
             case "+", "-":
+                RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar, c_)
+                c_+=OutputVar.Len
+                skip_comments()
+                return skip_expression()
             default:
                 RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
                 c_+=OutputVar_variableName.Len
@@ -362,7 +370,7 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
 AHK_parse(FileRead("MsgBox_Insane.ahk"))
-d bruhArr
+; d bruhArr
 
 finalStr:=""
 for v_ in bruhArr {
