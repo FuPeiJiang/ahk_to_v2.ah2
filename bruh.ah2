@@ -249,6 +249,16 @@ AHK_parse(str) {
                         argsArr[1]:=0
                 }
                 bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
+            case "MsgBox":
+                switch (argsArr.Length) {
+                    case 2:
+                        argsArr:=["`"`"", argsArr[2], "`"" argsArr[1] "`""]
+                    case 3:
+                        argsArr:=[argsArr[3], argsArr[2], "`"" argsArr[1] "`""]
+                    case 4:
+                        argsArr:=[argsArr[3], argsArr[2], "`"" argsArr[1] " T" argsArr[4] "`""]
+                }
+                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
             default:
                 bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
 

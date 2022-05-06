@@ -1,4 +1,5 @@
 ; MsgBox, Hello, world!  ; old
+MsgBox 48, Title
 MsgBox 48, Title, Text, 00.11  ; all commas are delimiters
 MsgBox 48, Title, Text, 0.  ; number
 MsgBox 48, Title, Text, .1  ; number
