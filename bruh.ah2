@@ -45,8 +45,8 @@ AHK_parse(str) {
                 ; directive #NoEnv
                 ; assignement #NoEnv:=2
 
-                RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar, c_)
-                c_+=OutputVar.Len
+                RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_varName, c_)
+                c_+=OutputVar_varName.Len
                 char_:=SubStr(str, c_, 1)
                 switch char_ {
                     case "":
@@ -57,8 +57,8 @@ AHK_parse(str) {
                         ; msgbox := 2 is an assignment
                         if (char1=="#") {
                             ; directive
-                            skip_commandArgs()
-                        } else if (OutputVar.0="if") {
+                            skip_directiveArgs()
+                        } else if (OutputVar_varName.0="if") {
                             ; if statement
                         } else {
                             skip_comments()
@@ -101,15 +101,14 @@ AHK_parse(str) {
         c_+=OutputVar_comments.Len
     }
 
-    skip_commandArgs() {
+    skip_directiveArgs() {
         argsArr:=[]
         loop {
             skip_comments()
             char_:=SubStr(str, c_, 1)
             switch char_ {
                 case "":
-                    bruhArr.Push(argsArr)
-                    return
+                    break
                 case "%":
                     ; expression only if followed by a \s, yes, \n works too
                     char_:=SubStr(str, c_ + 1, 1)
@@ -126,14 +125,81 @@ AHK_parse(str) {
                     continue
             }
             if (InStr(OutputVar_comments.0, "`n", true)) {
-                bruhArr.Push(argsArr)
-                return
+                break
             }
             ;v1str
             skip_v1str()
             argsArr.Push(OutputVar_v1str.0)
         }
 
+        switch (OutputVar_varName.0), 0 {
+            case "#NoEnv":
+            case "#KeyHistory":
+                bruhArr.Push({_name:"KeyHistory",args:argsArr})
+            default:
+                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
+
+        }
+
+    }
+
+    skip_commandArgs() {
+        argsArr:=[]
+        loop {
+            skip_comments()
+            char_:=SubStr(str, c_, 1)
+            switch char_ {
+                case "":
+                    break
+                case "%":
+                    ; expression only if followed by a \s, yes, \n works too
+                    char_:=SubStr(str, c_ + 1, 1)
+                    if (char_~="\s") {
+                        ; expression
+                    } else {
+                        ; v1str MsgBox %var%
+                        skip_v1str()
+                        argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
+                    }
+                    continue
+                case ",":
+                    c_++
+                    continue
+            }
+            if (InStr(OutputVar_comments.0, "`n", true)) {
+                break
+            }
+            ;v1str
+            skip_v1str()
+            argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
+        }
+
+        switch (OutputVar_varName.0), 0 {
+            case "SetBatchLines":
+            case "ListLines":
+                switch (argsArr[1]), 0 {
+                    case "`"On`"":
+                        argsArr[1]:=1
+                    case "`"Off`"":
+                        argsArr[1]:=0
+                }
+                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
+            default:
+                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
+
+        }
+
+    }
+
+    v1str_to_expression(str) {
+        ; %v% -> v
+        ; %v%aa -> v "aa"
+        ; aa%v% -> "aa" v
+        ; aa%v%aa -> "aa" v "aa"
+        ; aa%v%aa%v%aa -> "aa" v "aa" v "aa"
+        str:="`"" RegExReplace(str,"%(.*?)%", "`" $1 `"") "`""
+        str:=RegExReplace(str,"^`"`" | `"`"$")
+        return str
     }
 
     skip_v1str() {
@@ -143,7 +209,13 @@ AHK_parse(str) {
 }
 
 AHK_parse(FileRead("test.ahk"))
-d bruhArr
+; d bruhArr
+
+finalStr:=""
+for v_ in bruhArr {
+    finalStr.=v_._name " " v_.args[1] "`n"
+}
+A_Clipboard:=finalStr
 
 return
 
