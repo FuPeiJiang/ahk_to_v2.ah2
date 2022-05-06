@@ -14,7 +14,7 @@ AHK_parse(str) {
     OutputVar_v1str:="" ;scope it
 
 
-    skip_s()
+    skip_comments()
 
     statements_loop:
     loop {
@@ -103,6 +103,7 @@ AHK_parse(str) {
 
     skip_directiveArgs() {
         argsArr:=[]
+
         loop {
             skip_comments()
             char_:=SubStr(str, c_, 1)
@@ -116,7 +117,7 @@ AHK_parse(str) {
                         ; expression
                     } else {
                         ; v1str MsgBox %var%
-                        skip_v1str()
+                        skip_v1str_commaDelim()
                         argsArr.Push(OutputVar_v1str.0)
                     }
                     continue
@@ -128,7 +129,7 @@ AHK_parse(str) {
                 break
             }
             ;v1str
-            skip_v1str()
+            skip_v1str_commaDelim()
             argsArr.Push(OutputVar_v1str.0)
         }
 
@@ -145,34 +146,98 @@ AHK_parse(str) {
 
     skip_commandArgs() {
         argsArr:=[]
-        loop {
+        toPush:=""
+
+        skip_comments()
+        char_:=SubStr(str, c_, 1)
+        if (char_==",") {
+            c_++
             skip_comments()
-            char_:=SubStr(str, c_, 1)
-            switch char_ {
-                case "":
-                    break
-                case "%":
-                    ; expression only if followed by a \s, yes, \n works too
-                    char_:=SubStr(str, c_ + 1, 1)
-                    if (char_~="\s") {
-                        ; expression
-                    } else {
-                        ; v1str MsgBox %var%
-                        skip_v1str()
-                        argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
-                    }
-                    continue
-                case ",":
-                    c_++
-                    continue
-            }
-            if (InStr(OutputVar_comments.0, "`n", true)) {
-                break
-            }
-            ;v1str
-            skip_v1str()
-            argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
         }
+
+        if (OutputVar_varName.0="MsgBox") {
+            cLoL:=0
+            loop {
+                char_:=SubStr(str, c_, 1)
+                switch char_ {
+                    case "":
+                        break
+                    case "%":
+                        ; expression only if followed by a \s, yes, \n works too
+                        char_:=SubStr(str, c_ + 1, 1)
+                        if (char_~="\s") {
+                            ; expression
+                        } else {
+                            ; v1str MsgBox %var%
+                            skip_v1str_noNeedToEscapeComma()
+                            toPush:=v1str_to_expression(OutputVar_v1str.0)
+                        }
+                        skip_comments()
+                        continue
+                    case ",":
+                        c_++
+                        argsArr.Push(toPush)
+                        toPush:=""
+                        skip_comments()
+                        continue
+                }
+                if (InStr(OutputVar_comments.0, "`n", true)) {
+                    break
+                }
+                ;v1str
+
+                cBak:=c_
+                skip_v1str_commaDelim()
+                if (OutputVar_v1str.0~="\+?\d+|^$") {
+                    toPush:=OutputVar_v1str.0
+                } else if (argsArr.Length==1 || argsArr.Length==2) {
+                    toPush:=v1str_to_expression(OutputVar_v1str.0)
+                    cLoL:=cBak
+                } else if (argsArr.Length==3 && !(OutputVar_v1str.0~="\+?\d+|^$")) {
+                    c_:=cLoL
+                    skip_v1str_noNeedToEscapeComma()
+                    toPush:=v1str_to_expression(OutputVar_v1str.0)
+                    argsArr.Pop()
+                } else {
+                    c_:=cBak
+                    skip_v1str_noNeedToEscapeComma()
+                    toPush:=v1str_to_expression(OutputVar_v1str.0)
+                }
+                skip_comments()
+                continue
+            }
+            argsArr.Push(toPush)
+        } else {
+            loop {
+                skip_comments()
+                char_:=SubStr(str, c_, 1)
+                switch char_ {
+                    case "":
+                        break
+                    case "%":
+                        ; expression only if followed by a \s, yes, \n works too
+                        char_:=SubStr(str, c_ + 1, 1)
+                        if (char_~="\s") {
+                            ; expression
+                        } else {
+                            ; v1str MsgBox %var%
+                            skip_v1str_commaDelim()
+                            argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
+                        }
+                        continue
+                    case ",":
+                        c_++
+                        continue
+                }
+                if (InStr(OutputVar_comments.0, "`n", true)) {
+                    break
+                }
+                ;v1str
+                skip_v1str_commaDelim()
+                argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
+            }
+        }
+
 
         switch (OutputVar_varName.0), 0 {
             case "SetBatchLines":
@@ -202,18 +267,34 @@ AHK_parse(str) {
         return str
     }
 
-    skip_v1str() {
+    skip_v1str_commaDelim() {
         RegExMatch(str, "[^\s,]+(?:[ \t]+[^; \t,][^\s,]*)*", &OutputVar_v1str, c_)
+        c_+=OutputVar_v1str.Len
+    }
+
+    skip_v1str_noNeedToEscapeComma() {
+        RegExMatch(str, "\S+(?:[ \t]+[^; \t]\S*)*", &OutputVar_v1str, c_)
         c_+=OutputVar_v1str.Len
     }
 }
 
-AHK_parse(FileRead("test.ahk"))
+; AHK_parse(FileRead("test.ahk"))
+AHK_parse(FileRead("MsgBox.ahk"))
 ; d bruhArr
 
 finalStr:=""
 for v_ in bruhArr {
-    finalStr.=v_._name " " v_.args[1] "`n"
+    if (v_.args.Length) {
+        finalStr.=v_._name " " v_.args[1]
+        i_:=2, len:=v_.args.Length + 1
+        while (i_<len) {
+            finalStr.=", " v_.args[i_]
+            i_++
+        }
+        finalStr.="`n"
+    } else {
+        finalStr.=v_._name "`n"
+    }
 }
 A_Clipboard:=finalStr
 
