@@ -72,6 +72,7 @@ AHK_parse(str) {
                                 ; if skipped a line, it's another statement now
                                 ; if didn't skip a line, it's args...
                                 if (InStr(OutputVar_comments.0, "`n", true)) {
+                                    bruhArr.Push({_name:OutputVar_varName.0,args:[]})
                                     continue statements_loop
                                 } else {
                                     skip_commandArgs()
@@ -290,7 +291,7 @@ AHK_parse(str) {
 
 ; AHK_parse(FileRead("test.ahk"))
 AHK_parse(FileRead("MsgBox.ahk"))
-; d bruhArr
+d bruhArr
 
 finalStr:=""
 for v_ in bruhArr {
