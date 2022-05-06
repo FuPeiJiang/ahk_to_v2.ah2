@@ -32,6 +32,7 @@ AHK_parse(str) {
                 ; unary minus -2
                 ; at THIS point, you can just start the expression branch
                 ; in a function of course
+                skip_expression()
             ; case "#":
             default:
                 ; function call
@@ -62,10 +63,23 @@ AHK_parse(str) {
                             ; if statement
                         } else {
                             skip_comments()
-                            if (RegExMatch(str, "^[&*+\-.\/:<=>^|]+", &OutputVar, c_)) {
-                                ; assignment
-                                MsgBox OutputVar.0
-                                ; if it's unary plus, or *2, it's passed to MsgBox as v1str
+                            if (RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)) {
+                                if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
+                                    skip_expression()
+                                } else if (InStr(",++,--,", "," OutputVar_operator.0 ",", true)) {
+                                    if (InStr(OutputVar_comments.0, "`n", true)) {
+                                        ; MsgBox
+                                        ; ++2
+                                        bruhArr.Push({_name:OutputVar_varName.0,args:[]})
+                                        continue statements_loop
+                                    } else {
+                                        ; MsgBox ++2
+                                        skip_commandArgs()
+                                    }
+                                } else {
+                                    ; if it's unary plus, or *2, it's passed to MsgBox as v1str
+                                    skip_commandArgs()
+                                }
 
                             } else {
                                 ; command
@@ -346,8 +360,9 @@ AHK_parse(str) {
 }
 
 ; AHK_parse(FileRead("test.ahk"))
-AHK_parse(FileRead("MsgBox.ahk"))
-; d bruhArr
+; AHK_parse(FileRead("MsgBox.ahk"))
+AHK_parse(FileRead("MsgBox_Insane.ahk"))
+d bruhArr
 
 finalStr:=""
 for v_ in bruhArr {
