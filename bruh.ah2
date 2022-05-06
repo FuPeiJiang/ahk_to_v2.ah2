@@ -19,20 +19,21 @@ AHK_parse(str) {
     statements_loop:
     loop {
 
+        c1:=c_
         char1:=SubStr(str, c_ , 1)
         switch char1 {
             case "":
                 return
-            case "(":
-                ; group
             case "{":
                 ; block
-            case "+", "-":
+            case "+", "-", "(":
                 ; assignment ++v++
                 ; unary minus -2
                 ; at THIS point, you can just start the expression branch
                 ; in a function of course
-                skip_expression()
+
+                ; "(" group
+                bruhArr.Push(skip_expression())
             ; case "#":
             default:
                 ; function call
@@ -70,7 +71,7 @@ AHK_parse(str) {
                                     if (InStr(OutputVar_comments.0, "`n", true)) {
                                         ; MsgBox
                                         ; ++2
-                                        bruhArr.Push({_name:OutputVar_varName.0,args:[]})
+                                        bruhArr.Push({_name:OutputVar_varName.0,args:[],type:"command"})
                                         continue statements_loop
                                     } else {
                                         ; MsgBox ++2
@@ -89,7 +90,7 @@ AHK_parse(str) {
                                     if (RegExMatch(str, "(*COMMIT)(?i)(?:or|and)", &OutputVar_operator, c_)) {
                                         skip_commandArgs()
                                     } else {
-                                        bruhArr.Push({_name:OutputVar_varName.0,args:[]})
+                                        bruhArr.Push({_name:OutputVar_varName.0,args:[],type:"command"})
                                         continue statements_loop
                                     }
                                 } else {
@@ -97,9 +98,13 @@ AHK_parse(str) {
                                 }
                             }
                         }
+                    case "(", "[", '.':
+                        ; function call, array access, property
+                        c_:=c1
+                        skip_expression()
                     default:
                         ;assignment
-                        RegExMatch(str, "[&*+\-.\/:<=>^|]*", &OutputVar, c_)
+                        RegExMatch(str, "", &OutputVar, c_)
                         msgbox OutputVar.0
                         c_+=OutputVar.Len
                         skip_s()
@@ -155,9 +160,9 @@ AHK_parse(str) {
         switch (OutputVar_varName.0), 0 {
             case "#NoEnv":
             case "#KeyHistory":
-                bruhArr.Push({_name:"KeyHistory",args:argsArr})
+                bruhArr.Push({_name:"KeyHistory",args:argsArr,type:"command"})
             default:
-                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
+                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr,type:"command"})
 
         }
 
@@ -272,7 +277,7 @@ AHK_parse(str) {
                     case "`"Off`"":
                         argsArr[1]:=0
                 }
-                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
+                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr,type:"command"})
             case "MsgBox":
                 switch (argsArr.Length) {
                     case 2:
@@ -294,9 +299,9 @@ AHK_parse(str) {
                             }
                         }
                 }
-                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
+                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr,type:"command"})
             default:
-                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr})
+                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr,type:"command"})
 
         }
 
@@ -337,7 +342,7 @@ AHK_parse(str) {
                 RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar, c_)
                 c_+=OutputVar.Len
                 skip_comments()
-                return skip_expression()
+                return {type: "unary", op: OutputVar.0, right: skip_expression()}
             default:
                 RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
                 c_+=OutputVar_variableName.Len
@@ -374,16 +379,19 @@ AHK_parse(FileRead("MsgBox_Insane.ahk"))
 
 finalStr:=""
 for v_ in bruhArr {
-    if (v_.args.Length) {
-        finalStr.=v_._name " " v_.args[1]
-        i_:=2, len:=v_.args.Length + 1
-        while (i_<len) {
-            finalStr.=", " v_.args[i_]
-            i_++
-        }
-        finalStr.="`n"
-    } else {
-        finalStr.=v_._name "`n"
+    switch v_.type {
+        case "command":
+            if (v_.args.Length) {
+                finalStr.=v_._name " " v_.args[1]
+                i_:=2, len:=v_.args.Length + 1
+                while (i_<len) {
+                    finalStr.=", " v_.args[i_]
+                    i_++
+                }
+                finalStr.="`n"
+            } else {
+                finalStr.=v_._name "`n"
+            }
     }
 }
 A_Clipboard:=finalStr

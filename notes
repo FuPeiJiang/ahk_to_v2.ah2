@@ -77,3 +77,8 @@ unary minus
 skip_command
 ,
 %
+
+foo()
+when reach (, it's a function,
+backtrack to |foo()
+use skip_expression()
