@@ -66,7 +66,8 @@ AHK_parse(str) {
                             skip_comments()
                             if (RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)) {
                                 if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
-                                    skip_expression()
+                                    c_:=c1
+                                    bruhArr.Push(skip_expression())
                                 } else if (InStr(",++,--,", "," OutputVar_operator.0 ",", true)) {
                                     if (InStr(OutputVar_comments.0, "`n", true)) {
                                         ; MsgBox
@@ -104,10 +105,8 @@ AHK_parse(str) {
                         skip_expression()
                     default:
                         ;assignment
-                        RegExMatch(str, "", &OutputVar, c_)
-                        msgbox OutputVar.0
-                        c_+=OutputVar.Len
-                        skip_s()
+                        c_:=c1
+                        bruhArr.Push(skip_expression())
 
                 }
         }
@@ -121,7 +120,7 @@ AHK_parse(str) {
     }
 
     skip_comments() {
-        RegExMatch(str, "(?:(?:^|\s);.*|\/\*(?:.|\n)\n[ \t]*\*\/|\s)*", &OutputVar_comments, c_)
+        RegExMatch(str, "(?:(?:^|\s);.*|\/\*[\s\S]*?\n[ \t]*\*\/|\s)*", &OutputVar_comments, c_)
         c_+=OutputVar_comments.Len
     }
 
@@ -336,36 +335,53 @@ AHK_parse(str) {
 
         char_:=SubStr(str, c_, 1)
         switch char_ {
+            case "(":
+                ; group
+                c_++
+                skip_comments()
+                left:={type: "group", value: skip_expression()}
+                c_++
             case "{":
+                ; object literal
+                ; left:=OutputVar_variableName
             case "[":
+                ; array literal
+                ; left:=OutputVar_variableName
             case "+", "-":
                 RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar, c_)
                 c_+=OutputVar.Len
                 skip_comments()
-                return {type: "unary", op: OutputVar.0, right: skip_expression()}
+                left:={type: "unary", op: OutputVar.0, right: skip_expression()}
             default:
                 RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
                 c_+=OutputVar_variableName.Len
+                left:=OutputVar_variableName.0
+        }
+        char_:=SubStr(str, c_, 1)
+        switch char_ {
+            case '(':
+                ; function call
+            case '.':
+                ; property
+            default:
+                skip_comments()
                 char_:=SubStr(str, c_, 1)
                 switch char_ {
-                    case '(':
-                        ; function call
-                    case '.':
-                        ; property
+                    case "+", "-", ":", "&", "*", ".", "<", ">", "=", "^", "/", "|":
+                        RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
+                        c_+=OutputVar_operator.Len
+                        ; binary operation
+                        ; if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
+                            ; return {type: "assignment", op: OutputVar_operator.0, left:left, right: skip_expression()}
+                        ; } else {
+                            return {type: "binary", op: OutputVar_operator.0, left:left, right: skip_expression()}
+                        ; }
+                    case ",", "":
+                        return left
                     default:
-                        skip_comments()
-                        char_:=SubStr(str, c_, 1)
-                        switch char_ {
-                            case '+', '-':
-                                ; operator
-                            case ',', '':
-                                return OutputVar_variableName.0
-                            default:
-                                if (InStr(OutputVar_comments.0, "`n", true)) {
-                                    return OutputVar_variableName.0
-                                }
+                        if (InStr(OutputVar_comments.0, "`n", true)) {
+                            return left
                         }
-
                 }
 
         }
@@ -374,8 +390,9 @@ AHK_parse(str) {
 
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
-AHK_parse(FileRead("MsgBox_Insane.ahk"))
-; d bruhArr
+; AHK_parse(FileRead("MsgBox_Insane.ahk"))
+AHK_parse(FileRead("test2.ahk"))
+d bruhArr
 
 finalStr:=""
 for v_ in bruhArr {

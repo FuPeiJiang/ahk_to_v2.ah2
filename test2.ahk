@@ -6,24 +6,28 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 SetBatchLines -1
 #KeyHistory 0
 
-var:=2
-msgbox
-+2+2
+; var:={}
+; var.a:=0
+; MsgBox % (var).a
 
+; var:=2
+; msgbox
+; +2+2
+;
 if:=1
 if&=111
 msgbox
 -=2345
 MsgBox % msgbox
-
-foo() {
-    MsgBox % a??a
-}
-
-(#SingleInstance && foo())
+;
+; foo() {
+    ; MsgBox % a??a
+; }
+;
+; (#SingleInstance && foo())
 
    /* a
    */
-return
+; return
 
-f3::Exitapp
+; f3::Exitapp
