@@ -2,19 +2,10 @@
 ; MsgBox
 ; +2
 
-; MsgBox
-; +2
-; , Title
-; , Text
-; , +1
-
 ; MsgBox ++2
-MsgBox
-++2
-
 ; MsgBox
-; +=2
-
+; ++2
+;
 ; MsgBox
 ; or 3456345 2345
 ;

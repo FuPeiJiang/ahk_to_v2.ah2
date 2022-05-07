@@ -12,7 +12,7 @@ AHK_parse(str) {
     c_:=1
     OutputVar_comments:="" ;scope it
     OutputVar_v1str:="" ;scope it
-
+    backtrack_for_hotkey:=false
 
     skip_comments()
 
@@ -26,14 +26,16 @@ AHK_parse(str) {
                 return
             case "{":
                 ; block
-            case "+", "-", "(":
+            case "``":
+                skip_hotkey()
+            case "+", "-", "!", "~", "(":
                 ; assignment ++v++
                 ; unary minus -2
                 ; at THIS point, you can just start the expression branch
                 ; in a function of course
 
                 ; "(" group
-                bruhArr.Push(skip_expression())
+                skip_expression()
             ; case "#":
             default:
                 ; function call
@@ -52,6 +54,7 @@ AHK_parse(str) {
                 char_:=SubStr(str, c_, 1)
                 switch char_ {
                     case "":
+                        bruhArr.Push({_name:OutputVar_varName.0,args:[],type:"command"})
                         return
                     case " ", "`t", "`n", ",":
                         ;directive ONLY if starts with # of if
@@ -67,7 +70,7 @@ AHK_parse(str) {
                             if (RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)) {
                                 if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
                                     c_:=c1
-                                    bruhArr.Push(skip_expression())
+                                    skip_expression()
                                 } else if (InStr(",++,--,", "," OutputVar_operator.0 ",", true)) {
                                     if (InStr(OutputVar_comments.0, "`n", true)) {
                                         ; MsgBox
@@ -102,11 +105,11 @@ AHK_parse(str) {
                     case "(", "[", '.':
                         ; function call, array access, property
                         c_:=c1
-                        bruhArr.Push(skip_expression())
+                        skip_expression()
                     default:
                         ;assignment
                         c_:=c1
-                        bruhArr.Push(skip_expression())
+                        skip_expression()
 
                 }
         }
@@ -178,92 +181,116 @@ AHK_parse(str) {
             skip_comments()
         }
 
-        if (OutputVar_varName.0="MsgBox") {
-            cLoL:=0
-            loop {
-                char_:=SubStr(str, c_, 1)
-                switch char_ {
-                    case "":
-                        break
-                    case "%":
-                        ; expression only if followed by a \s, yes, \n works too
-                        char_:=SubStr(str, c_ + 1, 1)
-                        if (char_~="\s") {
-                            ; expression
-                            c_+=2
-                            toPush:=skip_expression()
-                            if (InStr(OutputVar_comments.0, "`n", true)) {
+        bruh:
+        loop 1 {
+            switch (OutputVar_varName.0), 0 {
+                case "MsgBox":
+                    cLoL:=0
+                    loop {
+                        char_:=SubStr(str, c_, 1)
+                        switch char_ {
+                            case "":
                                 break
-                            }
+                            case "%":
+                                ; expression only if followed by a \s, yes, \n works too
+                                char_:=SubStr(str, c_ + 1, 1)
+                                if (char_~="\s") {
+                                    ; expression
+                                    c_+=2
+                                    toPush:=value_expression()
+                                    if (InStr(OutputVar_comments.0, "`n", true)) {
+                                        break
+                                    }
+                                } else {
+                                    ; v1str MsgBox %var%
+                                    skip_v1str_noNeedToEscapeComma()
+                                    toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                }
+                                skip_comments()
+                                continue
+                            case ",":
+                                c_++
+                                argsArr.Push(toPush)
+                                toPush:=""
+                                skip_comments()
+                                continue
+                        }
+                        if (InStr(OutputVar_comments.0, "`n", true)) {
+                            break
+                        }
+                        ;v1str
+
+                        cBak:=c_
+                        skip_v1str_commaDelim()
+                        if (OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$") {
+                            toPush:=OutputVar_v1str.0
+                        } else if (argsArr.Length==1 || argsArr.Length==2) {
+                            toPush:=v1str_to_expression(OutputVar_v1str.0)
+                            cLoL:=cBak
+                        } else if (argsArr.Length==3 && !(OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$")) {
+                            c_:=cLoL
+                            skip_v1str_noNeedToEscapeComma()
+                            toPush:=v1str_to_expression(OutputVar_v1str.0)
+                            argsArr.Pop()
                         } else {
-                            ; v1str MsgBox %var%
+                            c_:=cBak
                             skip_v1str_noNeedToEscapeComma()
                             toPush:=v1str_to_expression(OutputVar_v1str.0)
                         }
                         skip_comments()
                         continue
-                    case ",":
-                        c_++
-                        argsArr.Push(toPush)
-                        toPush:=""
-                        skip_comments()
-                        continue
+                    }
+                    argsArr.Push(toPush)
+                    break bruh
+                case "Sleep":
+                    boolArr:=[1]
+                default:
+                    c_:=c1
+                    skip_hotkey()
+                    return
                 }
-                if (InStr(OutputVar_comments.0, "`n", true)) {
-                    break
-                }
-                ;v1str
-
-                cBak:=c_
-                skip_v1str_commaDelim()
-                if (OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$") {
-                    toPush:=OutputVar_v1str.0
-                } else if (argsArr.Length==1 || argsArr.Length==2) {
-                    toPush:=v1str_to_expression(OutputVar_v1str.0)
-                    cLoL:=cBak
-                } else if (argsArr.Length==3 && !(OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$")) {
-                    c_:=cLoL
-                    skip_v1str_noNeedToEscapeComma()
-                    toPush:=v1str_to_expression(OutputVar_v1str.0)
-                    argsArr.Pop()
-                } else {
-                    c_:=cBak
-                    skip_v1str_noNeedToEscapeComma()
-                    toPush:=v1str_to_expression(OutputVar_v1str.0)
-                }
-                skip_comments()
-                continue
-            }
-            argsArr.Push(toPush)
-        } else {
-            loop {
-                skip_comments()
-                char_:=SubStr(str, c_, 1)
-                switch char_ {
-                    case "":
-                        break
-                    case "%":
-                        ; expression only if followed by a \s, yes, \n works too
-                        char_:=SubStr(str, c_ + 1, 1)
-                        if (char_~="\s") {
-                            ; expression
-                        } else {
-                            ; v1str MsgBox %var%
-                            skip_v1str_commaDelim()
-                            argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
+                loop {
+                    char_:=SubStr(str, c_, 1)
+                    switch char_ {
+                        case "":
+                            break
+                        case "%":
+                            ; expression only if followed by a \s, yes, \n works too
+                            char_:=SubStr(str, c_ + 1, 1)
+                            if (char_~="\s") {
+                                ; expression
+                                c_+=2
+                                toPush:=value_expression()
+                                if (InStr(OutputVar_comments.0, "`n", true)) {
+                                    break
+                                }
+                            } else {
+                                ; v1str MsgBox %var%
+                                skip_v1str_commaDelim()
+                                argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
+                            }
+                            skip_comments()
+                            continue
+                        case ",":
+                            c_++
+                            skip_comments()
+                            continue
+                    }
+                    ;v1str
+                    if (boolArr[A_Index]) {
+                        toPush:=value_expression()
+                        if (InStr(OutputVar_comments.0, "`n", true)) {
+                            break
                         }
-                        continue
-                    case ",":
-                        c_++
-                        continue
+                    } else {
+                        skip_v1str_commaDelim()
+                        argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
+                        skip_comments()
+                    }
                 }
-                if (InStr(OutputVar_comments.0, "`n", true)) {
-                    break
-                }
-                ;v1str
-                skip_v1str_commaDelim()
-                argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
-            }
+                argsArr.Push(toPush)
+                break bruh
+
         }
 
 
@@ -328,18 +355,30 @@ AHK_parse(str) {
     }
 
     skip_expression() {
+        toPush:=value_expression()
+        if (backtrack_for_hotkey) {
+            backtrack_for_hotkey:=false
+            c_:=c1
+            skip_hotkey()
+            ; hotkey
+        } else {
+            bruhArr.Push(toPush)
+        }
+    }
+
+    value_expression() {
         ; variable, string, number, function call, array access, property access
         ; object literal, array literal
         ; ++assignment
         ; -unary minus
 
-        char_:=SubStr(str, c_, 1)
-        switch char_ {
+        char2:=SubStr(str, c_, 1)
+        switch char2 {
             case "(":
                 ; group
                 c_++
                 skip_comments()
-                left:={type: "group", value: skip_expression()}
+                left:={type: "group", value: value_expression()}
                 c_++
             case "{":
                 ; object literal
@@ -357,13 +396,13 @@ AHK_parse(str) {
                             case ":":
                                 c_++
                                 skip_comments()
-                                values.Push(skip_expression())
+                                values.Push(value_expression())
                                 continue
                             case ",":
                                 c_++
                                 skip_comments()
                         }
-                    keys.Push(skip_expression())
+                    keys.Push(value_expression())
                 }
             case "[":
                 ; array literal
@@ -373,11 +412,10 @@ AHK_parse(str) {
                 c_+=OutputVar_stringLiteral.Len
                 left:=RegExReplace(OutputVar_stringLiteral.0, "`"`"", "```"")
                 ; string literal
-            case "+", "-":
-                RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar, c_)
-                c_+=OutputVar.Len
+            case "+", "-", "!", "~":
+                c_++
                 skip_comments()
-                left:={type: "unary", op: OutputVar.0, right: skip_expression()}
+                left:={type: "unary", op: char2, right: value_expression()}
             default:
                 RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
                 c_+=OutputVar_variableName.Len
@@ -402,7 +440,7 @@ AHK_parse(str) {
                                 c_++
                                 skip_comments()
                         }
-                        args.Push(skip_expression())
+                        args.Push(value_expression())
                     }
                 case '[':
                     ; array access
@@ -420,14 +458,17 @@ AHK_parse(str) {
                             RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
                             if (OutputVar_operator.0==":") {
                                 return left
+                            } else if (SubStr(OutputVar_operator.0, -2)=="::") {
+                                backtrack_for_hotkey:=true
+                                return ""
                             }
                             c_+=OutputVar_operator.Len
                             skip_comments()
                             ; binary operation
                             ; if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
-                                ; return {type: "assignment", op: OutputVar_operator.0, left:left, right: skip_expression()}
+                                ; return {type: "assignment", op: OutputVar_operator.0, left:left, right: value_expression()}
                             ; } else {
-                                return {type: "binary", op: OutputVar_operator.0, left:left, right: skip_expression()}
+                                return {type: "binary", op: OutputVar_operator.0, left:left, right: value_expression()}
                             ; }
                         case ",", "":
                             return left
@@ -437,22 +478,28 @@ AHK_parse(str) {
                             } else if (InStr(OutputVar_comments.0, "`n", true)) {
                                 return left
                             } else {
-                                return {type: "concat", op: OutputVar_comments.0, left:left, right: skip_expression()}
+                                return {type: "concat", op: OutputVar_comments.0, left:left, right: value_expression()}
                             }
                     }
 
             }
         }
     }
+
+    skip_hotkey() {
+        MsgBox 100
+    }
 }
 
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
 ; AHK_parse(FileRead("MsgBox_Insane.ahk"))
-AHK_parse(FileRead("test2.ahk"))
+; AHK_parse(FileRead("test2.ahk"))
 ; AHK_parse(FileRead("concat.ahk"))
 ; AHK_parse(FileRead("object.ahk"))
-; d bruhArr
+; AHK_parse(FileRead("basic.ahk"))
+AHK_parse(FileRead("hotkey.ahk"))
+d bruhArr
 
 what() {
     finalStr:=""
