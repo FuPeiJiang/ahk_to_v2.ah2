@@ -6,10 +6,10 @@
 ; SetBatchLines -1
 ; #KeyHistory 0
 
-var:={}
-var:={a:23}
-var.a:=0
-MsgBox % (var).a
+; var:={}
+; var:={a:23}
+; var.a:=0
+; MsgBox % (var).a
 
 ; var:=2
 ; msgbox
@@ -21,11 +21,13 @@ MsgBox % (var).a
 ; -=2345
 ; MsgBox % msgbox
 ;
-; foo() {
-    ; MsgBox % a??a
-; }
+foo() {
+    return % "a"
+}
+
+MsgBox % foo() . {b:"c"}.b
 ;
-(#SingleInstance && foo())
+; (#SingleInstance && foo())
 
    /* a
    */

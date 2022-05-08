@@ -6,8 +6,9 @@ SetWorkingDir A_ScriptDir ; Ensures a consistent starting directory.
 
 #Include <Array>
 
-bruhArr:=[]
+currentArr:=[]
 AHK_parse(str) {
+    global currentArr
 
     c_:=1
     OutputVar_comments:="" ;scope it
@@ -16,7 +17,7 @@ AHK_parse(str) {
     backtrack_for_hotkey:=0
     aHotkeyWasFound:=false
 
-    currentArr:=bruhArr
+    arrArr := []
 
     hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
 
@@ -31,7 +32,21 @@ AHK_parse(str) {
             case "":
                 return
             case "{":
+                c_++
+                if (currentArr[currentArr.Length].type=="function call") {
+                    currentArr[currentArr.Length].type:="function definition"
+                    arrArr.Push(currentArr)
+                    currentArr.Push({type:"block", statements:statements:=[]})
+                    currentArr:=statements
+                }
+                skip_comments()
+                continue statements_loop
                 ; block
+            case "}":
+                c_++
+                currentArr:=arrArr.Pop()
+                skip_comments()
+                continue statements_loop
             case "``", "\":
                 c_:=InStr(str, "::", true, c_ + 1) + 2
                 add_hotkey()
@@ -257,8 +272,20 @@ AHK_parse(str) {
                     boolArr:=[2]
                 case "ToolTip":
                     boolArr:=[1,0,0,0]
-                ; case "Return":
-                    ; special
+                case "return":
+                    if (hotkeyBlockStart <= currentArr.Length) {
+                        blockArr:=[]
+                        i_:=hotkeyBlockStart
+                        while (i_ <= currentArr.Length) {
+                            blockArr.Push(currentArr[i_])
+                            i_++
+                        }
+                        currentArr.RemoveAt(currentArr.Length - blockArr.Length + 1, blockArr.Length)
+                        hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
+                        currentArr.Push({type:"block", statements:blockArr})
+                        return
+                    }
+                    boolArr:=[0]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -396,11 +423,11 @@ AHK_parse(str) {
                 c_:=aHotkeyWasFound
                 aHotkeyWasFound:=0
                 add_hotkey()
-                bruhArr.Push(toPush)
+                currentArr.Push(toPush)
             }
             ; hotkey
         } else {
-            bruhArr.Push(toPush)
+            currentArr.Push(toPush)
         }
     }
 
@@ -526,6 +553,9 @@ AHK_parse(str) {
                             return ""
                         case ",", "":
                             return left
+                        case "{":
+                            ; function definition
+                            return left
                         default:
                             if (!OutputVar_comments.0) {
                                 return left
@@ -541,26 +571,26 @@ AHK_parse(str) {
     }
 
     add_hotkey() {
-        bruhArr.Push(hotkeyToWatch:={type: "hotkey", keyName: SubStr(str, c1, c_ - c1)})
-        hotkeyBlockStart:=bruhArr.Length + 1
+        currentArr.Push(hotkeyToWatch:={type: "hotkey", keyName: SubStr(str, c1, c_ - c1)})
+        hotkeyBlockStart:=currentArr.Length + 1
         skip_comments()
     }
 
     add_command(_name, args) {
-        bruhArr.Push({_name:_name,args:args,type:"command"})
+        currentArr.Push({_name:_name,args:args,type:"command"})
     }
 
     add_empty_command() {
-        if (hotkeyBlockStart <= bruhArr.Length && OutputVar_varName.0="return") {
+        if (hotkeyBlockStart <= currentArr.Length && OutputVar_varName.0="return") {
             blockArr:=[]
             i_:=hotkeyBlockStart
-            while (i_ <= bruhArr.Length) {
-                blockArr.Push(bruhArr[i_])
+            while (i_ <= currentArr.Length) {
+                blockArr.Push(currentArr[i_])
                 i_++
             }
-            bruhArr.RemoveAt(bruhArr.Length - blockArr.Length + 1, blockArr.Length)
+            currentArr.RemoveAt(currentArr.Length - blockArr.Length + 1, blockArr.Length)
             hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
-            bruhArr.Push({type:"block", statements:blockArr})
+            currentArr.Push({type:"block", statements:blockArr})
         } else {
             add_command(OutputVar_varName.0, [])
         }
@@ -571,17 +601,17 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
 ; AHK_parse(FileRead("MsgBox_Insane.ahk"))
-; AHK_parse(FileRead("test2.ahk"))
+AHK_parse(FileRead("test2.ahk"))
 ; AHK_parse(FileRead("concat.ahk"))
 ; AHK_parse(FileRead("object.ahk"))
 ; AHK_parse(FileRead("basic.ahk"))
-AHK_parse(FileRead("hotkey.ahk"))
-; d bruhArr
+; AHK_parse(FileRead("hotkey.ahk"))
+; d currentArr
 
 what() {
     finalStr:=""
     indent:=""
-    for v_ in bruhArr {
+    for v_ in currentArr {
         withNewline(v_)
     }
     return finalStr
@@ -613,6 +643,8 @@ what() {
                 }
                 indent:=SubStr(indent, 3)
                 finalStr.="}`n"
+            case "function definition":
+                finalStr.=do(v_) " "
         }
     }
 
@@ -629,7 +661,7 @@ what() {
                 return v_.op do(v_.right)
             case "binary":
                 return do(v_.left) " " v_.op " " do(v_.right)
-            case "function call":
+            case "function call", "function definition":
                 argsStr:=""
                 if (v_.args.Length) {
                     argsStr.=v_._name " " do(v_.args[1])
