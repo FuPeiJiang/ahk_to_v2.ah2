@@ -103,6 +103,12 @@ AHK_parse(str) {
                                         ; MsgBox ++2
                                         skip_commandArgs()
                                     }
+                                } else if (OutputVar_operator.0=="=") {
+                                    c_++
+                                    skip_comments()
+                                    skip_v1str_noNeedToEscapeComma()
+                                    currentArr.Push({type: "binary", op: ":=", left:OutputVar_varName.0, right: v1str_to_expression(OutputVar_v1str.0)})
+
                                 } else {
                                     ; if it's unary plus, or *2, it's passed to MsgBox as v1str
                                     skip_commandArgs()
@@ -268,10 +274,21 @@ AHK_parse(str) {
                     break bruh
                 case "Sleep":
                     boolArr:=[0]
-                case "Send","SendRaw","SendInput","SendPlay","SendEvent":
-                    boolArr:=[2]
+                case "Send","SendRaw","SendInput","SendPlay","SendEvent"
+                ,"SendMode", "SetWorkingDir":
+                    boolArr:=[3]
+                case "CoordMode":
+                    boolArr:=[2,3]
                 case "ToolTip":
-                    boolArr:=[1,0,0,0]
+                    boolArr:=[2,0,0,0]
+                case "MouseGetPos":
+                    boolArr:=[1,1,1,1,0]
+                case "MouseMove":
+                    boolArr:=[0,0,0,3]
+                case "PixelGetColor":
+                    boolArr:=[0,0,0,3]
+                case "PixelSearch":
+                    boolArr:=[1,1,0,0,0,0,0,0,3]
                 case "return":
                     if (hotkeyBlockStart <= currentArr.Length) {
                         blockArr:=[]
@@ -295,6 +312,7 @@ AHK_parse(str) {
                     add_hotkey()
                     return
                 }
+                argNum:=1
                 loop {
                     char_:=SubStr(str, c_, 1)
                     switch char_ {
@@ -306,32 +324,48 @@ AHK_parse(str) {
                             if (char_~="\s") {
                                 ; expression
                                 c_+=2
+                                skip_comments()
                                 toPush:=value_expression()
                                 if (InStr(OutputVar_comments.0, "`n", true)) {
                                     break
                                 }
                             } else {
                                 ; v1str MsgBox %var%
-                                skip_v1str_commaDelim()
-                                argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
+                                if (argNum == boolArr.Length) {
+                                    skip_v1str_noNeedToEscapeComma()
+                                    toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                    skip_comments()
+                                    break
+                                } else {
+                                    skip_v1str_commaDelim()
+                                    toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                    skip_comments()
+                                    if (InStr(OutputVar_comments.0, "`n", true)) {
+                                        break
+                                    }
+                                }
                             }
-                            skip_comments()
                             continue
                         case ",":
                             c_++
+                            argNum++
+                            argsArr.Push(toPush)
+                            toPush:=""
                             skip_comments()
                             continue
                     }
                     ;v1str
-                    if (A_Index <= boolArr.Length) {
-                        switch boolArr[A_Index] {
+                    if (argNum <= boolArr.Length) {
+                        switch boolArr[argNum] {
                             case 0:
                                 toPush:=value_expression()
                             case 1:
+                                toPush:="&" value_expression()
+                            case 2:
                                 skip_v1str_commaDelim()
                                 toPush:=v1str_to_expression(OutputVar_v1str.0)
                                 skip_comments()
-                            case 2:
+                            case 3:
                                 skip_v1str_noNeedToEscapeComma()
                                 toPush:=v1str_to_expression(OutputVar_v1str.0)
                                 skip_comments()
@@ -377,6 +411,17 @@ AHK_parse(str) {
                                 argsArr:=[argsArr[3], argsArr[2], argsArr[1] " `" T`" " argsArr[4]]
                             }
                         }
+                }
+                add_command(OutputVar_varName.0, argsArr)
+            case "PixelGetColor":
+                if (argsArr.Length>=4) {
+                    argsArr[4]:=RegExReplace(argsArr[4], "(?i) *RGB *")
+                }
+                currentArr.Push({type: "binary", op: ":=", left:argsArr[1]
+                , right: {type: "function call", func: "PixelGetColor", args: [argsArr[2],argsArr[3],argsArr[4]]}})
+            case "PixelSearch":
+                if (argsArr.Length==9) {
+                    argsArr.Pop()
                 }
                 add_command(OutputVar_varName.0, argsArr)
             default:
@@ -601,11 +646,12 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
 ; AHK_parse(FileRead("MsgBox_Insane.ahk"))
-AHK_parse(FileRead("test2.ahk"))
+; AHK_parse(FileRead("test2.ahk"))
 ; AHK_parse(FileRead("concat.ahk"))
 ; AHK_parse(FileRead("object.ahk"))
 ; AHK_parse(FileRead("basic.ahk"))
 ; AHK_parse(FileRead("hotkey.ahk"))
+AHK_parse(FileRead("!get colour_mid.ahk"))
 ; d currentArr
 
 what() {
@@ -664,7 +710,7 @@ what() {
             case "function call", "function definition":
                 argsStr:=""
                 if (v_.args.Length) {
-                    argsStr.=v_._name " " do(v_.args[1])
+                    argsStr.=do(v_.args[1])
                     i_:=2, len:=v_.args.Length + 1
                     while (i_<len) {
                         argsStr.=", " do(v_.args[i_])
