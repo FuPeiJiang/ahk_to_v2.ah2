@@ -12,7 +12,10 @@ AHK_parse(str) {
     c_:=1
     OutputVar_comments:="" ;scope it
     OutputVar_v1str:="" ;scope it
-    backtrack_for_hotkey:=false
+
+    backtrack_for_hotkey:=0
+    aHotkeyWasFound:=false
+
     currentArr:=bruhArr
 
     hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
@@ -178,7 +181,6 @@ AHK_parse(str) {
         argsArr:=[]
         toPush:=""
 
-        skip_comments()
         char_:=SubStr(str, c_, 1)
         if (char_==",") {
             c_++
@@ -202,6 +204,9 @@ AHK_parse(str) {
                                     ; expression
                                     c_+=2
                                     toPush:=value_expression()
+                                    if (aHotkeyWasFound) {
+                                        break
+                                    }
                                     if (InStr(OutputVar_comments.0, "`n", true)) {
                                         break
                                     }
@@ -255,6 +260,10 @@ AHK_parse(str) {
                 ; case "Return":
                     ; special
                 default:
+                    if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
+                        c1:=c_ + pos - 1
+                        add_empty_command()
+                    }
                     c_:=InStr(str, "::", true, c_) + 2
                     add_hotkey()
                     return
@@ -347,6 +356,11 @@ AHK_parse(str) {
                 add_command(OutputVar_varName.0, argsArr)
 
         }
+        if (aHotkeyWasFound) {
+            c_:=aHotkeyWasFound
+            aHotkeyWasFound:=0
+            add_hotkey()
+        }
 
     }
 
@@ -373,10 +387,17 @@ AHK_parse(str) {
 
     skip_expression() {
         toPush:=value_expression()
-        if (backtrack_for_hotkey) {
-            c_:=backtrack_for_hotkey
-            backtrack_for_hotkey:=0
-            add_hotkey()
+        if (aHotkeyWasFound) {
+            if (backtrack_for_hotkey) {
+                c_:=backtrack_for_hotkey
+                aHotkeyWasFound:=backtrack_for_hotkey:=0
+                add_hotkey()
+            } else {
+                c_:=aHotkeyWasFound
+                aHotkeyWasFound:=0
+                add_hotkey()
+                bruhArr.Push(toPush)
+            }
             ; hotkey
         } else {
             bruhArr.Push(toPush)
@@ -468,29 +489,39 @@ AHK_parse(str) {
                     c_+=OutputVar_variableName.Len
                     left:={type: "property access", parent: left, propName: OutputVar_variableName.0}
                 default:
+                    cBakComments:=c_
                     skip_comments()
+                    bak_OutputVar_comments:=OutputVar_comments
                     char_:=SubStr(str, c_, 1)
                     switch char_ {
                         case "+", "-", ":", "&", "*", ".", "<", ">", "=", "^", "/", "|":
-                            RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
-                            if (OutputVar_operator.0==":") {
+                            RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_exprOperator, c_)
+                            if (OutputVar_exprOperator.0==":") {
                                 return left
-                            } else if (SubStr(OutputVar_operator.0, -2)=="::") {
-                                backtrack_for_hotkey:=c_ + OutputVar_operator.Len
+                            } else if (SubStr(OutputVar_exprOperator.0, -2)=="::") {
+                                aHotkeyWasFound:=backtrack_for_hotkey:=c_ + OutputVar_exprOperator.Len
                                 return ""
                             }
-                            c_+=OutputVar_operator.Len
+                            c_+=OutputVar_exprOperator.Len
                             skip_comments()
                             ; binary operation
-                            ; if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
-                                ; return {type: "assignment", op: OutputVar_operator.0, left:left, right: value_expression()}
+                            ; if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_exprOperator.0 ",", true)) {
+                                ; return {type: "assignment", op: OutputVar_exprOperator.0, left:left, right: value_expression()}
                             ; } else {
-                                return {type: "binary", op: OutputVar_operator.0, left:left, right: value_expression()}
+                                right:=value_expression()
+                                if (backtrack_for_hotkey) {
+                                    if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
+                                        c1:=cBakComments + pos
+                                        backtrack_for_hotkey:=0
+                                        return left
+                                    }
+                                }
+                                return {type: "binary", op: OutputVar_exprOperator.0, left:left, right: right}
                             ; }
                         case "``":
                             colonPos:=InStr(str, "::", true, c_ + 1)
                             if (colonPos) {
-                                backtrack_for_hotkey:=colonPos + 2
+                                aHotkeyWasFound:=backtrack_for_hotkey:=colonPos + 2
                             }
                             return ""
                         case ",", "":
@@ -543,8 +574,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("test2.ahk"))
 ; AHK_parse(FileRead("concat.ahk"))
 ; AHK_parse(FileRead("object.ahk"))
-AHK_parse(FileRead("basic.ahk"))
-; AHK_parse(FileRead("hotkey.ahk"))
+; AHK_parse(FileRead("basic.ahk"))
+AHK_parse(FileRead("hotkey.ahk"))
 ; d bruhArr
 
 what() {
@@ -580,6 +611,7 @@ what() {
                     finalStr.=indent
                     withNewline(s_)
                 }
+                indent:=SubStr(indent, 3)
                 finalStr.="}`n"
         }
     }
