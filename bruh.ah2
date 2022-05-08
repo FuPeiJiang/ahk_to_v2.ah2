@@ -13,6 +13,9 @@ AHK_parse(str) {
     OutputVar_comments:="" ;scope it
     OutputVar_v1str:="" ;scope it
     backtrack_for_hotkey:=false
+    currentArr:=bruhArr
+
+    hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
 
     skip_comments()
 
@@ -55,7 +58,7 @@ AHK_parse(str) {
                 char_:=SubStr(str, c_, 1)
                 switch char_ {
                     case "":
-                        bruhArr.Push({_name:OutputVar_varName.0,args:[],type:"command"})
+                        add_command(OutputVar_varName.0, [])
                         return
                     case " ", "`t", "`n", ",":
                         ;directive ONLY if starts with # of if
@@ -76,7 +79,7 @@ AHK_parse(str) {
                                     if (InStr(OutputVar_comments.0, "`n", true)) {
                                         ; MsgBox
                                         ; ++2
-                                        bruhArr.Push({_name:OutputVar_varName.0,args:[],type:"command"})
+                                        add_command(OutputVar_varName.0, [])
                                         continue statements_loop
                                     } else {
                                         ; MsgBox ++2
@@ -95,7 +98,19 @@ AHK_parse(str) {
                                     if (RegExMatch(str, "(*COMMIT)(?i)(?:or|and)", &OutputVar_operator, c_)) {
                                         skip_commandArgs()
                                     } else {
-                                        bruhArr.Push({_name:OutputVar_varName.0,args:[],type:"command"})
+                                        if (hotkeyBlockStart <= bruhArr.Length && OutputVar_varName.0="return") {
+                                            blockArr:=[]
+                                            i_:=hotkeyBlockStart
+                                            while (i_ <= bruhArr.Length) {
+                                                blockArr.Push(bruhArr[i_])
+                                                i_++
+                                            }
+                                            bruhArr.RemoveAt(bruhArr.Length - blockArr.Length + 1, blockArr.Length)
+                                            hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
+                                            bruhArr.Push({type:"block", statements:blockArr})
+                                        } else {
+                                            add_command(OutputVar_varName.0, [])
+                                        }
                                         continue statements_loop
                                     }
                                 } else {
@@ -163,9 +178,9 @@ AHK_parse(str) {
         switch (OutputVar_varName.0), 0 {
             case "#NoEnv":
             case "#KeyHistory":
-                bruhArr.Push({_name:"KeyHistory",args:argsArr,type:"command"})
+                add_command("KeyHistory", argsArr)
             default:
-                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr,type:"command"})
+                add_command(OutputVar_varName.0, argsArr)
 
         }
 
@@ -249,6 +264,8 @@ AHK_parse(str) {
                     boolArr:=[2]
                 case "ToolTip":
                     boolArr:=[1,0,0,0]
+                ; case "Return":
+                    ; special
                 default:
                     c_:=InStr(str, "::", true, c_) + 2
                     add_hotkey()
@@ -315,7 +332,7 @@ AHK_parse(str) {
                     case "`"Off`"":
                         argsArr[1]:=0
                 }
-                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr,type:"command"})
+                add_command(OutputVar_varName.0, argsArr)
             case "MsgBox":
                 switch (argsArr.Length) {
                     case 2:
@@ -337,9 +354,9 @@ AHK_parse(str) {
                             }
                         }
                 }
-                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr,type:"command"})
+                add_command(OutputVar_varName.0, argsArr)
             default:
-                bruhArr.Push({_name:OutputVar_varName.0,args:argsArr,type:"command"})
+                add_command(OutputVar_varName.0, argsArr)
 
         }
 
@@ -508,6 +525,10 @@ AHK_parse(str) {
         bruhArr.Push(hotkeyToWatch:={type: "hotkey", keyName: SubStr(str, c1, c_ - c1)})
         hotkeyBlockStart:=bruhArr.Length + 1
         skip_comments()
+    }
+
+    add_command(_name, args) {
+        bruhArr.Push({_name:_name,args:args,type:"command"})
     }
 
 }
