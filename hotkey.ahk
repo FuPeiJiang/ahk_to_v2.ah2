@@ -1,5 +1,4 @@
 ; <^>!m::MsgBox You pressed AltGr+m.
-return
 ~AppsKey & <::Send !+{Esc}
 <+p::MsgBox 2
 *LWin Up::return

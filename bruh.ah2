@@ -541,19 +541,17 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("object.ahk"))
 ; AHK_parse(FileRead("basic.ahk"))
 AHK_parse(FileRead("hotkey.ahk"))
-d bruhArr
+; d bruhArr
 
 what() {
     finalStr:=""
+    indent:=""
     for v_ in bruhArr {
-        finalStr.=do(v_) "`n"
+        withNewline(v_)
     }
     return finalStr
 
-    do(v_) {
-        if (Type(v_)=="String") {
-            return v_
-        }
+    withNewline(v_) {
         switch v_.type {
             case "command":
                 if (v_.args.Length) {
@@ -566,6 +564,27 @@ what() {
                 } else {
                     finalStr.=v_._name
                 }
+                finalStr.="`n"
+            case "hotkey":
+                finalStr.=v_.keyName
+            case "property access","group","unary","binary","function call":
+                finalStr.=do(v_) "`n"
+            case "block":
+                indent.="  "
+                finalStr.="{`n"
+                for s_ in v_.statements {
+                    finalStr.=indent
+                    withNewline(s_)
+                }
+                finalStr.="}`n"
+        }
+    }
+
+    do(v_) {
+        if (Type(v_)=="String") {
+            return v_
+        }
+        switch v_.type {
             case "property access":
                 return do(v_.parent) "." v_.propName
             case "group":
@@ -596,7 +615,7 @@ what() {
                     }
                 }
                 return "{" argsStr "}"
-            }
+        }
     }
 }
 
