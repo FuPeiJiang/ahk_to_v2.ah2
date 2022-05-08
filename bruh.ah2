@@ -26,8 +26,9 @@ AHK_parse(str) {
                 return
             case "{":
                 ; block
-            case "``":
-                skip_hotkey()
+            case "``", "\":
+                c_:=InStr(str, "::", true, c_ + 1) + 2
+                add_hotkey()
             case "+", "-", "!", "~", "(":
                 ; assignment ++v++
                 ; unary minus -2
@@ -243,10 +244,14 @@ AHK_parse(str) {
                     argsArr.Push(toPush)
                     break bruh
                 case "Sleep":
-                    boolArr:=[1]
+                    boolArr:=[0]
+                case "Send","SendRaw","SendInput","SendPlay","SendEvent":
+                    boolArr:=[2]
+                case "ToolTip":
+                    boolArr:=[1,0,0,0]
                 default:
-                    c_:=c1
-                    skip_hotkey()
+                    c_:=InStr(str, "::", true, c_) + 2
+                    add_hotkey()
                     return
                 }
                 loop {
@@ -277,15 +282,22 @@ AHK_parse(str) {
                             continue
                     }
                     ;v1str
-                    if (boolArr[A_Index]) {
-                        toPush:=value_expression()
+                    if (A_Index <= boolArr.Length) {
+                        switch boolArr[A_Index] {
+                            case 0:
+                                toPush:=value_expression()
+                            case 1:
+                                skip_v1str_commaDelim()
+                                toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                skip_comments()
+                            case 2:
+                                skip_v1str_noNeedToEscapeComma()
+                                toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                skip_comments()
+                        }
                         if (InStr(OutputVar_comments.0, "`n", true)) {
                             break
                         }
-                    } else {
-                        skip_v1str_commaDelim()
-                        argsArr.Push(v1str_to_expression(OutputVar_v1str.0))
-                        skip_comments()
                     }
                 }
                 argsArr.Push(toPush)
@@ -357,9 +369,9 @@ AHK_parse(str) {
     skip_expression() {
         toPush:=value_expression()
         if (backtrack_for_hotkey) {
-            backtrack_for_hotkey:=false
-            c_:=c1
-            skip_hotkey()
+            c_:=backtrack_for_hotkey
+            backtrack_for_hotkey:=0
+            add_hotkey()
             ; hotkey
         } else {
             bruhArr.Push(toPush)
@@ -459,7 +471,7 @@ AHK_parse(str) {
                             if (OutputVar_operator.0==":") {
                                 return left
                             } else if (SubStr(OutputVar_operator.0, -2)=="::") {
-                                backtrack_for_hotkey:=true
+                                backtrack_for_hotkey:=c_ + OutputVar_operator.Len
                                 return ""
                             }
                             c_+=OutputVar_operator.Len
@@ -470,6 +482,12 @@ AHK_parse(str) {
                             ; } else {
                                 return {type: "binary", op: OutputVar_operator.0, left:left, right: value_expression()}
                             ; }
+                        case "``":
+                            colonPos:=InStr(str, "::", true, c_ + 1)
+                            if (colonPos) {
+                                backtrack_for_hotkey:=colonPos + 2
+                            }
+                            return ""
                         case ",", "":
                             return left
                         default:
@@ -486,9 +504,12 @@ AHK_parse(str) {
         }
     }
 
-    skip_hotkey() {
-        MsgBox 100
+    add_hotkey() {
+        bruhArr.Push(hotkeyToWatch:={type: "hotkey", keyName: SubStr(str, c1, c_ - c1)})
+        hotkeyBlockStart:=bruhArr.Length + 1
+        skip_comments()
     }
+
 }
 
 ; AHK_parse(FileRead("test.ahk"))
