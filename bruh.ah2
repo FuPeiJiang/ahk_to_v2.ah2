@@ -58,7 +58,7 @@ AHK_parse(str) {
                 char_:=SubStr(str, c_, 1)
                 switch char_ {
                     case "":
-                        add_command(OutputVar_varName.0, [])
+                        add_empty_command()
                         return
                     case " ", "`t", "`n", ",":
                         ;directive ONLY if starts with # of if
@@ -98,19 +98,7 @@ AHK_parse(str) {
                                     if (RegExMatch(str, "(*COMMIT)(?i)(?:or|and)", &OutputVar_operator, c_)) {
                                         skip_commandArgs()
                                     } else {
-                                        if (hotkeyBlockStart <= bruhArr.Length && OutputVar_varName.0="return") {
-                                            blockArr:=[]
-                                            i_:=hotkeyBlockStart
-                                            while (i_ <= bruhArr.Length) {
-                                                blockArr.Push(bruhArr[i_])
-                                                i_++
-                                            }
-                                            bruhArr.RemoveAt(bruhArr.Length - blockArr.Length + 1, blockArr.Length)
-                                            hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
-                                            bruhArr.Push({type:"block", statements:blockArr})
-                                        } else {
-                                            add_command(OutputVar_varName.0, [])
-                                        }
+                                        add_empty_command()
                                         continue statements_loop
                                     }
                                 } else {
@@ -531,6 +519,22 @@ AHK_parse(str) {
         bruhArr.Push({_name:_name,args:args,type:"command"})
     }
 
+    add_empty_command() {
+        if (hotkeyBlockStart <= bruhArr.Length && OutputVar_varName.0="return") {
+            blockArr:=[]
+            i_:=hotkeyBlockStart
+            while (i_ <= bruhArr.Length) {
+                blockArr.Push(bruhArr[i_])
+                i_++
+            }
+            bruhArr.RemoveAt(bruhArr.Length - blockArr.Length + 1, blockArr.Length)
+            hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
+            bruhArr.Push({type:"block", statements:blockArr})
+        } else {
+            add_command(OutputVar_varName.0, [])
+        }
+    }
+
 }
 
 ; AHK_parse(FileRead("test.ahk"))
@@ -539,8 +543,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("test2.ahk"))
 ; AHK_parse(FileRead("concat.ahk"))
 ; AHK_parse(FileRead("object.ahk"))
-; AHK_parse(FileRead("basic.ahk"))
-AHK_parse(FileRead("hotkey.ahk"))
+AHK_parse(FileRead("basic.ahk"))
+; AHK_parse(FileRead("hotkey.ahk"))
 ; d bruhArr
 
 what() {
