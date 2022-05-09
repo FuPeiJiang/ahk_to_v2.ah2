@@ -135,9 +135,17 @@ AHK_parse(str) {
                         c_:=c1
                         skip_expression()
                     default:
-                        ;assignment
-                        c_:=c1
-                        skip_expression()
+                        RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
+                        if (OutputVar_operator.0==":") {
+                            ;label
+                            c_++
+                            currentArr.Push({type:"label", labelName:SubStr(str, c1, c_ - c1)})
+                            skip_comments()
+                        } else {
+                            ;assignment
+                            c_:=c1
+                            skip_expression()
+                        }
 
                 }
         }
@@ -191,6 +199,8 @@ AHK_parse(str) {
             case "#NoEnv":
             case "#KeyHistory":
                 add_command("KeyHistory", argsArr)
+            case "#MaxHotkeysPerInterval":
+                currentArr.Push({type: "binary", op: ":=", left:"A_MaxHotkeysPerInterval", right: argsArr[1]})
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -275,7 +285,8 @@ AHK_parse(str) {
                 case "Sleep":
                     boolArr:=[0]
                 case "Send","SendRaw","SendInput","SendPlay","SendEvent"
-                ,"SendMode", "SetWorkingDir":
+                ,"SendMode", "SetWorkingDir", "SetBatchLines", "ListLines"
+                ,"Goto":
                     boolArr:=[3]
                 case "CoordMode":
                     boolArr:=[2,3]
@@ -303,6 +314,8 @@ AHK_parse(str) {
                         return
                     }
                     boolArr:=[0]
+                case "Process":
+                    boolArr:=[0,0,3]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -386,9 +399,9 @@ AHK_parse(str) {
             case "ListLines":
                 switch (argsArr[1]), 0 {
                     case "`"On`"":
-                        argsArr[1]:=1
+                        argsArr[1]:="1"
                     case "`"Off`"":
-                        argsArr[1]:=0
+                        argsArr[1]:="0"
                 }
                 add_command(OutputVar_varName.0, argsArr)
             case "MsgBox":
@@ -424,6 +437,21 @@ AHK_parse(str) {
                     argsArr.Pop()
                 }
                 add_command(OutputVar_varName.0, argsArr)
+            case "Process":
+                switch (argsArr[1]), 0 {
+                    case "Priority":
+                        tempArr:=[argsArr[3]]
+                        if (argsArr[2]!=="") {
+                            tempArr.Push(argsArr[2])
+                        }
+                        add_command("ProcessSetPriority", tempArr)
+                }
+            case "Goto":
+                if (SubStr(argsArr[1],1,1)=="`"") {
+                    add_command("Goto", [SubStr(argsArr[1],2,-1)])
+                } else {
+                    currentArr.Push({type: "function call", func: "Goto", args: [argsArr[1]]})
+                }
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -651,8 +679,9 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("object.ahk"))
 ; AHK_parse(FileRead("basic.ahk"))
 ; AHK_parse(FileRead("hotkey.ahk"))
-AHK_parse(FileRead("!get colour_mid.ahk"))
-; d currentArr
+; AHK_parse(FileRead("!get colour_mid.ahk"))
+AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
+d currentArr
 
 what() {
     finalStr:=""
