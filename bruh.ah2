@@ -344,7 +344,7 @@ AHK_parse(str) {
                     if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "if with block") {
                         currentArr[currentArr.Length].type:="block before else"
                     }
-                    currentArr.Push({type:"else"})
+                    currentArr.Push({type:"else with block"})
                     skip_comments()
                     return
                 default:
@@ -584,7 +584,7 @@ AHK_parse(str) {
             case "+", "-", "!", "~":
                 c_++
                 skip_comments()
-                left:={type: "unary", op: char2, right: value_expression()}
+                left:={type: "pre-unary", op: char2, right: value_expression()}
             default:
                 RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
                 c_+=OutputVar_variableName.Len
@@ -629,6 +629,10 @@ AHK_parse(str) {
                             RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_exprOperator, c_)
                             if (OutputVar_exprOperator.0==":") {
                                 return left
+                            } else if (OutputVar_exprOperator.0=="++" || OutputVar_exprOperator.0=="--") {
+                                c_+=OutputVar_exprOperator.Len
+                                skip_comments()
+                                return {type:"post-unary assignment", left:left, op:OutputVar_exprOperator.0}
                             } else if (SubStr(OutputVar_exprOperator.0, -2)=="::") {
                                 aHotkeyWasFound:=backtrack_for_hotkey:=c_ + OutputVar_exprOperator.Len
                                 return ""
@@ -661,7 +665,7 @@ AHK_parse(str) {
                             ; function definition
                             return left
                         default:
-                            if (!OutputVar_comments.0) {
+                            if (OutputVar_comments.0=="" && SubStr(left,1,1)!=="`"") {
                                 return left
                             } else if (InStr(OutputVar_comments.0, "`n", true)) {
                                 return left
@@ -713,7 +717,7 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("!get colour_mid.ahk"))
 ; AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
 AHK_parse(FileRead("ifelse.ahk"))
-; d currentArr
+d currentArr
 
 what() {
     finalStr:=""
@@ -749,7 +753,7 @@ what() {
                     finalStr.="`n"
                 case "hotkey":
                     finalStr.=v_.keyName
-                case "property access","group","unary","binary","function call":
+                case "property access","group","unary", "post-unary assignment", "binary","function call":
                     finalStr.=do(v_) "`n"
                 case "block":
                     finalStr.="{`n"
@@ -785,12 +789,12 @@ what() {
                     v_:=statements[++k_]
                     withNewline()
                     indent:=SubStr(indent, 3)
-                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else")) {
+                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else with block")) {
                         finalStr.=indent
                         v_:=statements[++k_]
                         withNewline()
                     }
-                case "else":
+                case "else with block":
                     finalStr.="else "
                     v_:=statements[++k_]
                     withNewline()
@@ -817,8 +821,12 @@ what() {
                 return "(" do(v_.value) ")"
             case "unary":
                 return v_.op do(v_.right)
+            case "post-unary assignment":
+                return do(v_.left) v_.op
             case "binary":
                 return do(v_.left) " " v_.op " " do(v_.right)
+            case "concat":
+                return do(v_.left) (v_.op == "" ? " " : v_.op) do(v_.right)
             case "function call", "function definition":
                 argsStr:=""
                 if (v_.args.Length) {
