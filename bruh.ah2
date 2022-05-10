@@ -134,9 +134,8 @@ AHK_parse(str) {
                                         skip_commandArgs()
                                     } else {
                                         if (OutputVar_varName.0="else") {
-                                            switch currentArr[currentArr.Length].type {
-                                                case "block":
-                                                    currentArr[currentArr.Length].type:="block before else"
+                                            if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "if with block") {
+                                                currentArr[currentArr.Length].type:="block before else"
                                             }
                                             skip_comments()
                                             char_:=SubStr(str, c_, 1)
@@ -342,9 +341,8 @@ AHK_parse(str) {
                 case "Process":
                     boolArr:=[0,0,3]
                 case "else":
-                    switch currentArr[currentArr.Length].type {
-                        case "block":
-                            currentArr[currentArr.Length].type:="block before else"
+                    if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "if with block") {
+                        currentArr[currentArr.Length].type:="block before else"
                     }
                     currentArr.Push({type:"else"})
                     skip_comments()
@@ -713,7 +711,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("basic.ahk"))
 ; AHK_parse(FileRead("hotkey.ahk"))
 ; AHK_parse(FileRead("!get colour_mid.ahk"))
-AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
+; AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
+AHK_parse(FileRead("ifelse.ahk"))
 ; d currentArr
 
 what() {
@@ -757,25 +756,25 @@ what() {
                     indent.="  "
                     do_statements(v_.statements)
                     indent:=SubStr(indent, 3)
+                    finalStr.=indent
                     finalStr.="}`n"
                 case "block before else":
                     finalStr.="{`n"
                     indent.="  "
                     do_statements(v_.statements)
                     indent:=SubStr(indent, 3)
-                    finalStr.="} else "
-                    k_++
-                    switch statements[k_ + 1].type {
-                        case "block":
-                            v_:=statements[++k_]
-                            withNewline()
-                    }
+                    finalStr.=indent
+                    finalStr.="} "
                 case "function definition":
                     finalStr.=do(v_) " "
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
                 case "if with block":
                     finalStr.="if "
+                    v_:=statements[++k_]
+                    withNewline()
+                    v_:=statements[++k_]
+                    withNewline()
                 case "if without block":
                     finalStr.="if "
                     v_:=statements[++k_]
@@ -786,15 +785,17 @@ what() {
                     v_:=statements[++k_]
                     withNewline()
                     indent:=SubStr(indent, 3)
-                    if (k_ + 1 < statements_len && statements[k_+1].type == "else without block") {
+                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else")) {
                         finalStr.=indent
                         v_:=statements[++k_]
                         withNewline()
                     }
-                case "else with block":
+                case "else":
                     finalStr.="else "
+                    v_:=statements[++k_]
+                    withNewline()
                 case "else without block":
-                    finalStr.="else "
+                    finalStr.="else"
                     finalStr.="`n"
                     indent.="  "
                     finalStr.=indent

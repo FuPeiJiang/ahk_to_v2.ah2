@@ -1,7 +1,9 @@
+
+
 if (abc)
-	if (abc)
+	if (abc) {
 		MsgBox % 1
-	else
+	} else
 		MsgBox % 2
 else
 	if (abc)
