@@ -33,12 +33,13 @@ AHK_parse(str) {
                 return
             case "{":
                 c_++
-                if (currentArr[currentArr.Length].type=="function call") {
-                    currentArr[currentArr.Length].type:="function definition"
-                    arrArr.Push(currentArr)
-                    currentArr.Push({type:"block", statements:statements:=[]})
-                    currentArr:=statements
+                switch currentArr[currentArr.Length].type {
+                    case "function call":
+                        currentArr[currentArr.Length].type:="function definition"
                 }
+                arrArr.Push(currentArr)
+                currentArr.Push({type:"block", statements:statements:=[]})
+                currentArr:=statements
                 skip_comments()
                 continue statements_loop
                 ; block
@@ -87,6 +88,16 @@ AHK_parse(str) {
                             skip_directiveArgs()
                         } else if (OutputVar_varName.0="if") {
                             ; if statement
+                            skip_comments()
+                            toPush:=value_expression()
+                            char_:=SubStr(str, c_, 1)
+                            if (char_=="{") {
+                                currentArr.Push({type:"if with block"})
+                                currentArr.Push({type: "condition with block",expr:toPush})
+                            } else {
+                                currentArr.Push({type:"if without block"})
+                                currentArr.Push(toPush)
+                            }
                         } else {
                             skip_comments()
                             if (RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)) {
@@ -122,7 +133,21 @@ AHK_parse(str) {
                                     if (RegExMatch(str, "(*COMMIT)(?i)(?:or|and)", &OutputVar_operator, c_)) {
                                         skip_commandArgs()
                                     } else {
-                                        add_empty_command()
+                                        if (OutputVar_varName.0="else") {
+                                            switch currentArr[currentArr.Length].type {
+                                                case "block":
+                                                    currentArr[currentArr.Length].type:="block before else"
+                                            }
+                                            skip_comments()
+                                            char_:=SubStr(str, c_, 1)
+                                            if (char_=="{") {
+                                                currentArr.Push({type:"else with block"})
+                                            } else {
+                                                currentArr.Push({type:"else without block"})
+                                            }
+                                        } else {
+                                            add_empty_command()
+                                        }
                                         continue statements_loop
                                     }
                                 } else {
@@ -316,6 +341,14 @@ AHK_parse(str) {
                     boolArr:=[0]
                 case "Process":
                     boolArr:=[0,0,3]
+                case "else":
+                    switch currentArr[currentArr.Length].type {
+                        case "block":
+                            currentArr[currentArr.Length].type:="block before else"
+                    }
+                    currentArr.Push({type:"else"})
+                    skip_comments()
+                    return
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -681,45 +714,94 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("hotkey.ahk"))
 ; AHK_parse(FileRead("!get colour_mid.ahk"))
 AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
-d currentArr
+; d currentArr
 
 what() {
     finalStr:=""
     indent:=""
-    for v_ in currentArr {
-        withNewline(v_)
-    }
+
+    do_statements(currentArr)
     return finalStr
 
-    withNewline(v_) {
-        switch v_.type {
-            case "command":
-                if (v_.args.Length) {
-                    finalStr.=v_._name " " do(v_.args[1])
-                    i_:=2, len:=v_.args.Length + 1
-                    while (i_<len) {
-                        finalStr.=", " do(v_.args[i_])
-                        i_++
+    do_statements(statements) {
+
+        statements_len:=statements.Length + 1
+        k_:=1
+        while (k_ < statements_len) {
+            v_:=statements[k_]
+            finalStr.=indent
+            withNewline()
+            k_++
+        }
+
+        withNewline() {
+            switch v_.type {
+                case "command":
+                    if (v_.args.Length) {
+                        finalStr.=v_._name " " do(v_.args[1])
+                        i_:=2, len:=v_.args.Length + 1
+                        while (i_<len) {
+                            finalStr.=", " do(v_.args[i_])
+                            i_++
+                        }
+                    } else {
+                        finalStr.=v_._name
                     }
-                } else {
-                    finalStr.=v_._name
-                }
-                finalStr.="`n"
-            case "hotkey":
-                finalStr.=v_.keyName
-            case "property access","group","unary","binary","function call":
-                finalStr.=do(v_) "`n"
-            case "block":
-                indent.="  "
-                finalStr.="{`n"
-                for s_ in v_.statements {
+                    finalStr.="`n"
+                case "hotkey":
+                    finalStr.=v_.keyName
+                case "property access","group","unary","binary","function call":
+                    finalStr.=do(v_) "`n"
+                case "block":
+                    finalStr.="{`n"
+                    indent.="  "
+                    do_statements(v_.statements)
+                    indent:=SubStr(indent, 3)
+                    finalStr.="}`n"
+                case "block before else":
+                    finalStr.="{`n"
+                    indent.="  "
+                    do_statements(v_.statements)
+                    indent:=SubStr(indent, 3)
+                    finalStr.="} else "
+                    k_++
+                    switch statements[k_ + 1].type {
+                        case "block":
+                            v_:=statements[++k_]
+                            withNewline()
+                    }
+                case "function definition":
+                    finalStr.=do(v_) " "
+                case "condition with block":
+                    finalStr.=do(v_.expr) " "
+                case "if with block":
+                    finalStr.="if "
+                case "if without block":
+                    finalStr.="if "
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
                     finalStr.=indent
-                    withNewline(s_)
-                }
-                indent:=SubStr(indent, 3)
-                finalStr.="}`n"
-            case "function definition":
-                finalStr.=do(v_) " "
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
+                    if (k_ + 1 < statements_len && statements[k_+1].type == "else without block") {
+                        finalStr.=indent
+                        v_:=statements[++k_]
+                        withNewline()
+                    }
+                case "else with block":
+                    finalStr.="else "
+                case "else without block":
+                    finalStr.="else "
+                    finalStr.="`n"
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
+            }
         }
     }
 
