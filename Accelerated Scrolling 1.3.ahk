@@ -1,3 +1,4 @@
+Scroll:
 	t := A_TimeSincePriorHotkey
 	if (A_PriorHotkey = A_ThisHotkey && t < timeout)
 	{
@@ -36,3 +37,20 @@
 		MouseClick %A_ThisHotkey%
 	}
 	return
+
+Quit:
+	QuickToolTip("Exiting Accelerated Scrolling...", 1000)
+	Sleep 1000
+	ExitApp
+
+QuickToolTip(text, delay)
+{
+	ToolTip, %text%
+	SetTimer ToolTipOff, %delay%
+	return
+
+	ToolTipOff:
+	SetTimer ToolTipOff, Off
+	ToolTip
+	return
+}

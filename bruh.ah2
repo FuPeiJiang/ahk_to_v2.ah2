@@ -349,6 +349,8 @@ AHK_parse(str) {
                     return
                 case "MouseClick":
                     boolArr:=[2,0,0,0,0,2,3]
+                case "SetTimer":
+                    boolArr:=[2,2,0]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -485,6 +487,13 @@ AHK_parse(str) {
                 } else {
                     currentArr.Push({type: "function call", func: "Goto", args: [argsArr[1]]})
                 }
+            case "SetTimer":
+                if (argsArr.Length >= 2) {
+                    if (argsArr[2]=="`"Off`"") {
+                        argsArr[2]:="0"
+                    }
+                }
+                add_command(OutputVar_varName.0, argsArr)
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -838,6 +847,9 @@ what() {
                     v_:=statements[++k_]
                     withNewline()
                     indent:=SubStr(indent, 3)
+                case "label":
+                    finalStr.=v_.labelName "`n"
+
             }
         }
     }
