@@ -347,6 +347,8 @@ AHK_parse(str) {
                     currentArr.Push({type:"else with block"})
                     skip_comments()
                     return
+                case "MouseClick":
+                    boolArr:=[2,0,0,0,0,2,3]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -651,8 +653,38 @@ AHK_parse(str) {
                                         return left
                                     }
                                 }
+                                ; if (OutputVar_exprOperator.0=="?") {
                                 return {type: "binary", op: OutputVar_exprOperator.0, left:left, right: right}
                             ; }
+                        case "?":
+                            c_++
+                            skip_comments()
+
+                            right:=value_expression()
+                            if (backtrack_for_hotkey) {
+                                if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
+                                    c1:=cBakComments + pos
+                                    backtrack_for_hotkey:=0
+                                    return left
+                                }
+                            }
+
+                            char_:=SubStr(str, c_, 1)
+                            if (char_==":") {
+                                c_++
+                                skip_comments()
+                                ifFalse:=value_expression()
+                                if (backtrack_for_hotkey) {
+                                    if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
+                                        c1:=cBakComments + pos
+                                        backtrack_for_hotkey:=0
+                                        return left
+                                    }
+                                }
+                                return {type:"ternary",condition:left,ifTrue:right,ifFalse:ifFalse}
+                            } else {
+                                MsgBox "You Need a : to your ?"
+                            }
                         case "``":
                             colonPos:=InStr(str, "::", true, c_ + 1)
                             if (colonPos) {
@@ -715,8 +747,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("basic.ahk"))
 ; AHK_parse(FileRead("hotkey.ahk"))
 ; AHK_parse(FileRead("!get colour_mid.ahk"))
-; AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
-AHK_parse(FileRead("ifelse.ahk"))
+AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
+; AHK_parse(FileRead("ifelse.ahk"))
 d currentArr
 
 what() {
@@ -753,7 +785,7 @@ what() {
                     finalStr.="`n"
                 case "hotkey":
                     finalStr.=v_.keyName
-                case "property access","group","unary", "post-unary assignment", "binary","function call":
+                case "property access","group","unary", "post-unary assignment", "binary","function call", "ternary":
                     finalStr.=do(v_) "`n"
                 case "block":
                     finalStr.="{`n"
@@ -825,6 +857,8 @@ what() {
                 return do(v_.left) v_.op
             case "binary":
                 return do(v_.left) " " v_.op " " do(v_.right)
+            case "ternary":
+                return do(v_.condition) " ? " do(v_.ifTrue) " : " do(v_.ifFalse)
             case "concat":
                 return do(v_.left) (v_.op == "" ? " " : v_.op) do(v_.right)
             case "function call", "function definition":
