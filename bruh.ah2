@@ -60,6 +60,36 @@ AHK_parse(str) {
                 ; "(" group
                 skip_expression()
             ; case "#":
+            case ",":
+                ; a:=1,b:=2
+                ; or the cursed: Return "", ErrorLevel := 1
+                if (currentArr[currentArr.Length].type=="command") {
+                    ; rip
+                    if (currentArr.Length > 1) {
+                        if (currentArr[currentArr.Length - 1].type == "else without block") {
+                            currentArr[currentArr.Length - 1].type := "else with block"
+                        } else if (currentArr[currentArr.Length - 2].type == "if without block") {
+                            currentArr[currentArr.Length - 2].type := "if with block"
+                            currentArr[currentArr.Length - 1] := {type: "condition with block",expr:currentArr[currentArr.Length - 1]}
+                        } else {
+                            MsgBox "what do I do here ? 7238472834"
+                        }
+                        c_++
+                        skip_comments()
+                        toPush:=value_expression()
+                        currentArr[currentArr.Length]:={type:"block", statements: [toPush, currentArr[currentArr.Length]]}
+                    } else {
+                        c_++
+                        skip_comments()
+                        toPush:=value_expression()
+                        currentArr.InsertAt(1, toPush)
+                    }
+                } else {
+                    c_++
+                    skip_comments()
+                    toPush:=value_expression()
+                    currentArr[currentArr.Length]:={type:"comma multi-statement", left:currentArr[currentArr.Length], right:toPush}
+                }
             default:
                 ; function call
                 ; function definition
@@ -90,6 +120,9 @@ AHK_parse(str) {
                             ; if statement
                             skip_comments()
                             toPush:=value_expression()
+                            if (Type(toPush)=="String") {
+                                toPush:={type: "group", value: toPush}
+                            }
                             char_:=SubStr(str, c_, 1)
                             if (char_=="{") {
                                 currentArr.Push({type:"if with block"})
@@ -403,24 +436,25 @@ AHK_parse(str) {
                             continue
                     }
                     ;v1str
-                    if (argNum <= boolArr.Length) {
-                        switch boolArr[argNum] {
-                            case 0:
-                                toPush:=value_expression()
-                            case 1:
-                                toPush:="&" value_expression()
-                            case 2:
-                                skip_v1str_commaDelim()
-                                toPush:=v1str_to_expression(OutputVar_v1str.0)
-                                skip_comments()
-                            case 3:
-                                skip_v1str_noNeedToEscapeComma()
-                                toPush:=v1str_to_expression(OutputVar_v1str.0)
-                                skip_comments()
-                        }
-                        if (InStr(OutputVar_comments.0, "`n", true)) {
-                            break
-                        }
+                    switch boolArr[argNum] {
+                        case 0:
+                            toPush:=value_expression()
+                        case 1:
+                            toPush:="&" value_expression()
+                        case 2:
+                            skip_v1str_commaDelim()
+                            toPush:=v1str_to_expression(OutputVar_v1str.0)
+                            skip_comments()
+                        case 3:
+                            skip_v1str_noNeedToEscapeComma()
+                            toPush:=v1str_to_expression(OutputVar_v1str.0)
+                            skip_comments()
+                    }
+                    if (InStr(OutputVar_comments.0, "`n", true)) {
+                        break
+                    }
+                    if (argNum == boolArr.Length) {
+                        break
                     }
                 }
                 argsArr.Push(toPush)
@@ -755,7 +789,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("!get colour_mid.ahk"))
 ; AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
 ; AHK_parse(FileRead("ifelse.ahk"))
-AHK_parse(FileRead("RunAsTask.ahk"))
+; AHK_parse(FileRead("RunAsTask.ahk"))
+AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
 d currentArr
 
 what() {
@@ -847,7 +882,8 @@ what() {
                     indent:=SubStr(indent, 3)
                 case "label":
                     finalStr.=v_.labelName "`n"
-
+                case "comma multi-statement":
+                    finalStr.=do(v_) "`n"
             }
         }
     }
@@ -867,6 +903,8 @@ what() {
                 return do(v_.left) v_.op
             case "binary":
                 return do(v_.left) " " v_.op " " do(v_.right)
+            case "comma multi-statement":
+                return do(v_.left) ", " do(v_.right)
             case "ternary":
                 return do(v_.condition) " ? " do(v_.ifTrue) " : " do(v_.ifFalse)
             case "concat":
