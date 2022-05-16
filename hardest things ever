@@ -1,0 +1,19 @@
+labels -> function definition
+goto label -> function call
+
+any label that's outside, becomes a function definition.
+
+any label that has SetTimer to it, must become a function definition.
+
+any label with invalid goto, must become a function.
+
+declare global variables
+    any variable that's possibly undefined
+
+else
+    Return "", ErrorLevel := 1
+->
+else {
+    ErrorLevel := 1
+    Return ""
+}

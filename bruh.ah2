@@ -588,9 +588,9 @@ AHK_parse(str) {
                 ; array literal
                 ; left:=OutputVar_variableName
             case "`"":
-                RegExMatch(str, "`"(?:`"`"|[^`"])*`"", &OutputVar_stringLiteral, c_)
+                RegExMatch(str, "`"((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, c_)
                 c_+=OutputVar_stringLiteral.Len
-                left:=RegExReplace(OutputVar_stringLiteral.0, "`"`"", "```"")
+                left:="`"" StrReplace(OutputVar_stringLiteral.1, "`"`"", "```"") "`""
                 ; string literal
             case "+", "-", "!", "~":
                 c_++
@@ -700,10 +700,7 @@ AHK_parse(str) {
                                 aHotkeyWasFound:=backtrack_for_hotkey:=colonPos + 2
                             }
                             return ""
-                        case ",", "":
-                            return left
-                        case "{":
-                            ; function definition
+                        case ",", "", "{", ")":
                             return left
                         default:
                             if (OutputVar_comments.0=="" && SubStr(left,1,1)!=="`"") {
@@ -756,8 +753,9 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("basic.ahk"))
 ; AHK_parse(FileRead("hotkey.ahk"))
 ; AHK_parse(FileRead("!get colour_mid.ahk"))
-AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
+; AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
 ; AHK_parse(FileRead("ifelse.ahk"))
+AHK_parse(FileRead("RunAsTask.ahk"))
 d currentArr
 
 what() {
@@ -863,7 +861,7 @@ what() {
                 return do(v_.parent) "." v_.propName
             case "group":
                 return "(" do(v_.value) ")"
-            case "unary":
+            case "pre-unary":
                 return v_.op do(v_.right)
             case "post-unary assignment":
                 return do(v_.left) v_.op
