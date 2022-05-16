@@ -68,11 +68,17 @@ AHK_parse(str) {
                     if (currentArr.Length > 1) {
                         if (currentArr[currentArr.Length - 1].type == "else without block") {
                             currentArr[currentArr.Length - 1].type := "else with block"
+                        } else if (currentArr[currentArr.Length - 1].type == "catch without block") {
+                            currentArr[currentArr.Length - 1].type := "catch with block"
                         } else if (currentArr[currentArr.Length - 2].type == "if without block") {
                             currentArr[currentArr.Length - 2].type := "if with block"
                             currentArr[currentArr.Length - 1] := {type: "condition with block",expr:currentArr[currentArr.Length - 1]}
                         } else {
-                            MsgBox "what do I do here ? 7238472834"
+                            c_++
+                            skip_comments()
+                            toPush:=value_expression()
+                            currentArr.InsertAt(currentArr.Length, toPush)
+                            continue statements_loop
                         }
                         c_++
                         skip_comments()
@@ -176,6 +182,17 @@ AHK_parse(str) {
                                                 currentArr.Push({type:"else with block"})
                                             } else {
                                                 currentArr.Push({type:"else without block"})
+                                            }
+                                        } else if (OutputVar_varName.0="catch") {
+                                            if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "try with block") {
+                                                currentArr[currentArr.Length].type:="block before catch"
+                                            }
+                                            skip_comments()
+                                            char_:=SubStr(str, c_, 1)
+                                            if (char_=="{") {
+                                                currentArr.Push({type:"catch with block"})
+                                            } else {
+                                                currentArr.Push({type:"catch without block"})
                                             }
                                         } else {
                                             add_empty_command()
@@ -384,6 +401,17 @@ AHK_parse(str) {
                     boolArr:=[2,0,0,0,0,2,3]
                 case "SetTimer":
                     boolArr:=[2,2,0]
+                case "try":
+                    skip_comments()
+                    char_:=SubStr(str, c_, 1)
+                    if (char_=="{") {
+                        currentArr.Push({type:"try with block"})
+                    } else {
+                        currentArr.Push({type:"try without block"})
+                    }
+                    return
+                case "Run", "RunWait":
+                    boolArr:=[2,2,2,1]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -790,7 +818,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
 ; AHK_parse(FileRead("ifelse.ahk"))
 ; AHK_parse(FileRead("RunAsTask.ahk"))
-AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
+; AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
+AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
 d currentArr
 
 what() {
@@ -872,8 +901,20 @@ what() {
                     finalStr.="else "
                     v_:=statements[++k_]
                     withNewline()
+                case "catch with block":
+                    finalStr.="catch "
+                    v_:=statements[++k_]
+                    withNewline()
                 case "else without block":
                     finalStr.="else"
+                    finalStr.="`n"
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
+                case "try without block":
+                    finalStr.="try"
                     finalStr.="`n"
                     indent.="  "
                     finalStr.=indent
