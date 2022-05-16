@@ -17,6 +17,9 @@ AHK_parse(str) {
     backtrack_for_hotkey:=0
     aHotkeyWasFound:=false
 
+    string_continuation_section_options:=false
+    string_continuation_section_JoinWith:="``n"
+
     arrArr := []
 
     hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
@@ -652,6 +655,45 @@ AHK_parse(str) {
             case "`"":
                 RegExMatch(str, "`"((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, c_)
                 c_+=OutputVar_stringLiteral.Len
+
+
+                ; XML := "
+                ; ;fwefwefwef
+                ; ( LTrim Join
+                ;skip comments
+                RegExMatch(OutputVar_stringLiteral.1, "(?:(?:^|\s);.*|\/\*[\s\S]*?\n[ \t]*\*\/|\s)*", &OutputVar_innerComments)
+                innerChar:=SubStr(OutputVar_stringLiteral.1, OutputVar_innerComments.Len + 1, 1)
+                if (innerChar=="(" && InStr(OutputVar_innerComments.0, "`n", true)) {
+                    ; string continuation section
+                    pos_newline:=InStr(OutputVar_stringLiteral.1, "`n", true, OutputVar_innerComments.Len + 2)
+                    string_continuation_section_options:=SubStr(OutputVar_stringLiteral.1, OutputVar_innerComments.Len + 2, pos_newline - (OutputVar_innerComments.Len + 2))
+                    OutputVar_stringLiteral.1 := SubStr(OutputVar_stringLiteral.1, pos_newline + 1)
+                    if (InStr(string_continuation_section_options, "LTrim")) {
+                        OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "^[ \t]*")
+                    }
+                    if (pos_join:=InStr(string_continuation_section_options, "Join")) {
+                        pos_space:=InStr(string_continuation_section_options, " ", true, pos_join + 4) || StrLen(string_continuation_section_options)
+                        string_continuation_section_JoinWith:=SubStr(string_continuation_section_options, pos_join + 4, pos_space - (pos_join + 4) + 1)
+                        string_continuation_section_JoinWith:=StrReplace(string_continuation_section_JoinWith, "``s", " ", true)
+                    } else {
+                        string_continuation_section_JoinWith:="``n"
+                    }
+                }
+                if (string_continuation_section_options!==false) {
+                    if (pos_newlineBefore:=RegExMatch(OutputVar_stringLiteral.1, "\n[ \t]*\)", &OutputVar_EndContinuationSection)) {
+                        after:=SubStr(OutputVar_stringLiteral.1, pos_newlineBefore + OutputVar_EndContinuationSection.Len)
+                        OutputVar_stringLiteral.1:=SubStr(OutputVar_stringLiteral.1, 1, pos_newlineBefore - 1)
+                        string_continuation_section_options:=false
+                    }
+                    if (InStr(string_continuation_section_options, "LTrim")) {
+                        OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "\n[ \t]*", "`n")
+                    }
+                    OutputVar_stringLiteral.1:=StrReplace(OutputVar_stringLiteral.1, "`n", string_continuation_section_JoinWith, true)
+
+                    if (string_continuation_section_options==false) {
+                        OutputVar_stringLiteral.1.=after
+                    }
+                }
                 left:="`"" StrReplace(OutputVar_stringLiteral.1, "`"`"", "```"") "`""
                 ; string literal
             case "+", "-", "!", "~":
@@ -819,7 +861,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("ifelse.ahk"))
 ; AHK_parse(FileRead("RunAsTask.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
-AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
+; AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
+AHK_parse(FileRead("string continuation section.ahk"))
 d currentArr
 
 what() {
