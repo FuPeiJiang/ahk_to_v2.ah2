@@ -654,8 +654,8 @@ AHK_parse(str) {
                 ; left:=OutputVar_variableName
             case "`"":
                 if (string_continuation_section_options==false) {
-                    RegExMatch(str, "`"((?:[ \t]+(?=;)(*ACCEPT)|`"`"|[^`"\n]|\n(*ACCEPT))*)(`")", &OutputVar_stringLiteral, c_)
-                    c_+=OutputVar_stringLiteral.Len
+                    RegExMatch(str, "((?:[ \t]+(?=;)(*ACCEPT)|`"`"|[^`"\n]|\n(*ACCEPT))*)(`")", &OutputVar_stringLiteral, c_ + 1)
+                    c_:=c_ + 1 + OutputVar_stringLiteral.Len
 
 
                     if (!OutputVar_stringLiteral.2) {
@@ -684,12 +684,11 @@ AHK_parse(str) {
                         }
                     }
                 } else {
-                    RegExMatch(str, "`"((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, c_)
-                    c_+=OutputVar_stringLiteral.Len
+                    RegExMatch(str, "((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, c_ + 1)
+                    c_:=c_ + 1 + OutputVar_stringLiteral.Len
 
-                    OutputVar_stringLiteral.1:=StrReplace(OutputVar_stringLiteral.1, " `;", " ```;", true)
-                    OutputVar_stringLiteral.1:=StrReplace(OutputVar_stringLiteral.1, "`t`;", "`t```;", true)
                 }
+                OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "(?<!``);", "```;")
 
                 if (string_continuation_section_options!==false) {
                     if (pos_newlineBefore:=RegExMatch(OutputVar_stringLiteral.1, "\n[ \t]*\)", &OutputVar_EndContinuationSection)) {

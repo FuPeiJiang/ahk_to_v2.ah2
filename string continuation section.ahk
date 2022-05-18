@@ -3,11 +3,11 @@
     ; <?xml version=""1.0"" ?>
 ;
     ;  )"
-XML := "abc ;hello world
-( Join|
-    <?xml version=""1.0"" ?>
-" "`n      ;hello   hello " "
-     )   "
+; XML := "abc ;hello world
+; ( Join|
+    ; <?xml version=""1.0"" ?>
+; " "`n      ;hello   hello " "
+    ;  )   "
 
 ; XML := "
 ; ( LTrim Join
@@ -27,12 +27,12 @@ XML := "abc ;hello world
     ; <WorkingDirectory>" A_ScriptDir "</WorkingDirectory></Exec></Actions></Task>
 ; )"
 
-/* XML := " `;hello      ;world
+XML := " `;hello      ;world
 ; "hello world"
-(
+( Join`s
 1
-2
+;2;
 3
 )"
- */
+
 Clipboard:=XML "2"
