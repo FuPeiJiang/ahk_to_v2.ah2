@@ -653,32 +653,44 @@ AHK_parse(str) {
                 ; array literal
                 ; left:=OutputVar_variableName
             case "`"":
-                RegExMatch(str, "`"((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, c_)
-                c_+=OutputVar_stringLiteral.Len
+                if (string_continuation_section_options==false) {
+                    RegExMatch(str, "`"((?:[ \t]+(?=;)(*ACCEPT)|`"`"|[^`"\n]|\n(*ACCEPT))*)(`")", &OutputVar_stringLiteral, c_)
+                    c_+=OutputVar_stringLiteral.Len
 
 
-                ; XML := "
-                ; ;fwefwefwef
-                ; ( LTrim Join
-                ;skip comments
-                RegExMatch(OutputVar_stringLiteral.1, "(?:(?:^|\s);.*|\/\*[\s\S]*?\n[ \t]*\*\/|\s)*", &OutputVar_innerComments)
-                innerChar:=SubStr(OutputVar_stringLiteral.1, OutputVar_innerComments.Len + 1, 1)
-                if (innerChar=="(" && InStr(OutputVar_innerComments.0, "`n", true)) {
-                    ; string continuation section
-                    pos_newline:=InStr(OutputVar_stringLiteral.1, "`n", true, OutputVar_innerComments.Len + 2)
-                    string_continuation_section_options:=SubStr(OutputVar_stringLiteral.1, OutputVar_innerComments.Len + 2, pos_newline - (OutputVar_innerComments.Len + 2))
-                    OutputVar_stringLiteral.1 := SubStr(OutputVar_stringLiteral.1, pos_newline + 1)
-                    if (InStr(string_continuation_section_options, "LTrim")) {
-                        OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "^[ \t]*")
+                    if (!OutputVar_stringLiteral.2) {
+                        before:=RTrim(OutputVar_stringLiteral.1)
+                        ; string continuation section
+                        c_--
+                        RegExMatch(str, "(?:(?:^|\s);.*|\/\*[\s\S]*?\n[ \t]*\*\/|\s)*", &OutputVar_innerComments, c_)
+                        c_+=OutputVar_innerComments.Len
+                        pos_newline:=InStr(str, "`n", true, c_)
+                        string_continuation_section_options:=SubStr(str, c_ + 1, pos_newline - (c_ + 1))
+
+                        RegExMatch(str, "((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, pos_newline + 1)
+                        c_:=pos_newline + 1 + OutputVar_stringLiteral.Len
+
+                        OutputVar_stringLiteral.1:=before OutputVar_stringLiteral.1
+
+                        if (InStr(string_continuation_section_options, "LTrim")) {
+                            OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "^[ \t]*")
+                        }
+                        if (pos_join:=InStr(string_continuation_section_options, "Join")) {
+                            pos_space:=InStr(string_continuation_section_options, " ", true, pos_join + 4) || StrLen(string_continuation_section_options)
+                            string_continuation_section_JoinWith:=SubStr(string_continuation_section_options, pos_join + 4, pos_space - (pos_join + 4) + 1)
+                            string_continuation_section_JoinWith:=StrReplace(string_continuation_section_JoinWith, "``s", " ", true)
+                        } else {
+                            string_continuation_section_JoinWith:="``n"
+                        }
                     }
-                    if (pos_join:=InStr(string_continuation_section_options, "Join")) {
-                        pos_space:=InStr(string_continuation_section_options, " ", true, pos_join + 4) || StrLen(string_continuation_section_options)
-                        string_continuation_section_JoinWith:=SubStr(string_continuation_section_options, pos_join + 4, pos_space - (pos_join + 4) + 1)
-                        string_continuation_section_JoinWith:=StrReplace(string_continuation_section_JoinWith, "``s", " ", true)
-                    } else {
-                        string_continuation_section_JoinWith:="``n"
-                    }
+                } else {
+                    RegExMatch(str, "`"((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, c_)
+                    c_+=OutputVar_stringLiteral.Len
+
+                    OutputVar_stringLiteral.1:=StrReplace(OutputVar_stringLiteral.1, " `;", " ```;", true)
+                    OutputVar_stringLiteral.1:=StrReplace(OutputVar_stringLiteral.1, "`t`;", "`t```;", true)
                 }
+
                 if (string_continuation_section_options!==false) {
                     if (pos_newlineBefore:=RegExMatch(OutputVar_stringLiteral.1, "\n[ \t]*\)", &OutputVar_EndContinuationSection)) {
                         after:=SubStr(OutputVar_stringLiteral.1, pos_newlineBefore + OutputVar_EndContinuationSection.Len)
