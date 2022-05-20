@@ -415,6 +415,13 @@ AHK_parse(str) {
                     return
                 case "Run", "RunWait":
                     boolArr:=[2,2,2,1]
+                case "local", "global", "static":
+                    currentArr.Push({type:"var scope declaration", value: StrLower(OutputVar_varName.0)})
+                    toPush:=value_expression()
+                    if (toPush) {
+                        currentArr.Push({type:"first var scope", value:toPush})
+                    }
+                    return
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -853,7 +860,13 @@ AHK_parse(str) {
             hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
             currentArr.Push({type:"block", statements:blockArr})
         } else {
-            add_command(OutputVar_varName.0, [])
+            lowered:=StrLower(OutputVar_varName.0)
+            switch lowered {
+                case "local", "global", "static":
+                    add_command(lowered, [])
+                default:
+                    add_command(OutputVar_varName.0, [])
+            }
         }
     }
 
@@ -868,12 +881,12 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("basic.ahk"))
 ; AHK_parse(FileRead("hotkey.ahk"))
 ; AHK_parse(FileRead("!get colour_mid.ahk"))
-; AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
+AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
 ; AHK_parse(FileRead("ifelse.ahk"))
 ; AHK_parse(FileRead("RunAsTask.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
-AHK_parse(FileRead("string continuation section.ahk"))
+; AHK_parse(FileRead("string continuation section.ahk"))
 d currentArr
 
 what() {
@@ -910,8 +923,18 @@ what() {
                     finalStr.="`n"
                 case "hotkey":
                     finalStr.=v_.keyName
-                case "property access","group","unary", "post-unary assignment", "binary","function call", "ternary":
+                case "property access","group","unary", "post-unary assignment", "binary","function call", "ternary"
+                , "comma multi-statement":
                     finalStr.=do(v_) "`n"
+                case "var scope declaration":
+                    finalStr.=v_.value
+                    v_:=statements[++k_]
+                    if (v_.type == "comma multi-statement") {
+                        finalStr.=" "
+                    } else {
+                        finalStr.="\n"
+                    }
+                    withNewline()
                 case "block":
                     finalStr.="{`n"
                     indent.="  "
@@ -977,8 +1000,6 @@ what() {
                     indent:=SubStr(indent, 3)
                 case "label":
                     finalStr.=v_.labelName "`n"
-                case "comma multi-statement":
-                    finalStr.=do(v_) "`n"
             }
         }
     }
@@ -988,6 +1009,8 @@ what() {
             return v_
         }
         switch v_.type {
+            case "first var scope":
+                return do(v_.value)
             case "property access":
                 return do(v_.parent) "." v_.propName
             case "group":
