@@ -149,7 +149,7 @@ Scroll:
 		MouseClick %A_ThisHotkey%
 	}
 	return
-
+F3::Goto Quit
 Quit:
 	QuickToolTip("Exiting Accelerated Scrolling...", 1000)
 	Sleep 1000

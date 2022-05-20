@@ -23,6 +23,7 @@ AHK_parse(str) {
     arrArr := []
 
     hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
+    labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
 
     skip_comments()
 
@@ -216,7 +217,8 @@ AHK_parse(str) {
                         if (OutputVar_operator.0==":") {
                             ;label
                             c_++
-                            currentArr.Push({type:"label", labelName:SubStr(str, c1, c_ - c1)})
+                            currentArr.Push({type:"label", labelName:SubStr(str, c1, c_ - c1 - 1)})
+                            labelBlockStart:=currentArr.Length + 1
                             skip_comments()
                         } else {
                             ;assignment
@@ -390,6 +392,19 @@ AHK_parse(str) {
                         currentArr.Push({type:"block", statements:blockArr})
                         return
                     }
+                    if (labelBlockStart <= currentArr.Length) {
+                        blockArr:=[]
+                        i_:=labelBlockStart
+                        while (i_ <= currentArr.Length) {
+                            blockArr.Push(currentArr[i_])
+                            i_++
+                        }
+                        currentArr.RemoveAt(currentArr.Length - blockArr.Length + 1, blockArr.Length)
+                        labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
+                        currentArr.Push({type:"block", statements:blockArr})
+                        return
+                    }
+
                     boolArr:=[0]
                 case "Process":
                     boolArr:=[0,0,3]
@@ -403,7 +418,8 @@ AHK_parse(str) {
                 case "MouseClick":
                     boolArr:=[2,0,0,0,0,2,3]
                 case "SetTimer":
-                    boolArr:=[2,2,0]
+                    ; boolArr:=[2,2,0]
+                    boolArr:=[0,2,0]
                 case "try":
                     skip_comments()
                     char_:=SubStr(str, c_, 1)
@@ -554,10 +570,18 @@ AHK_parse(str) {
                         add_command("ProcessSetPriority", tempArr)
                 }
             case "Goto":
-                if (SubStr(argsArr[1],1,1)=="`"") {
-                    add_command("Goto", [SubStr(argsArr[1],2,-1)])
+                if (currentArr[currentArr.Length].type=="hotkey") {
+                    if (SubStr(argsArr[1],1,1)=="`"") {
+                        currentArr.Push({type: "function call", func: SubStr(argsArr[1],2,-1), args: []})
+                    } else {
+                        currentArr.Push({type: "function call", func: "%" argsArr[1] "%", args: []})
+                    }
                 } else {
-                    currentArr.Push({type: "function call", func: "Goto", args: [argsArr[1]]})
+                    if (SubStr(argsArr[1],1,1)=="`"") {
+                        add_command("Goto", [SubStr(argsArr[1],2,-1)])
+                    } else {
+                        currentArr.Push({type: "function call", func: "Goto", args: [argsArr[1]]})
+                    }
                 }
             case "SetTimer":
                 if (argsArr.Length >= 2) {
@@ -855,7 +879,25 @@ AHK_parse(str) {
     }
 
     add_empty_command() {
-        if (hotkeyBlockStart <= currentArr.Length && OutputVar_varName.0="return") {
+        if (labelBlockStart <= currentArr.Length && (OutputVar_varName.0="return" || OutputVar_varName.0="exitapp")) {
+            if (OutputVar_varName.0="exitapp") {
+                add_command("ExitApp", [])
+            }
+            blockArr:=[]
+            i_:=labelBlockStart
+            while (i_ <= currentArr.Length) {
+                blockArr.Push(currentArr[i_])
+                i_++
+            }
+            currentArr.RemoveAt(currentArr.Length - blockArr.Length + 1, blockArr.Length)
+            labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
+            hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
+            currentArr[currentArr.Length] := {type: "function definition", func: currentArr[currentArr.Length].labelName, args:[]}
+            currentArr.Push({type:"block", statements:blockArr})
+        } else if (hotkeyBlockStart <= currentArr.Length && (OutputVar_varName.0="return" || OutputVar_varName.0="exitapp")) {
+            if (OutputVar_varName.0="exitapp") {
+                add_command("ExitApp", [])
+            }
             blockArr:=[]
             i_:=hotkeyBlockStart
             while (i_ <= currentArr.Length) {
@@ -894,6 +936,7 @@ AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
 ; AHK_parse(FileRead("string continuation section.ahk"))
 d currentArr
+
 
 what() {
     finalStr:=""
@@ -957,6 +1000,8 @@ what() {
                     finalStr.="} "
                 case "function definition":
                     finalStr.=do(v_) " "
+                    v_:=statements[++k_]
+                    withNewline()
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
                 case "if with block":
@@ -1005,7 +1050,7 @@ what() {
                     withNewline()
                     indent:=SubStr(indent, 3)
                 case "label":
-                    finalStr.=v_.labelName "`n"
+                    finalStr.=v_.labelName ":`n"
             }
         }
     }
