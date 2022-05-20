@@ -735,6 +735,12 @@ AHK_parse(str) {
                         char_:=SubStr(str, c_, 1)
                         switch char_ {
                             case ")":
+                                if (Type(left)=="String") {
+                                    switch left, 0 {
+                                        case "ComObjCreate":
+                                            left:="ComObject"
+                                    }
+                                }
                                 left:={type: "function call", func: left, args: args}
                                 c_++
                                 break
