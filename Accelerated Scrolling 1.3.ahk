@@ -111,6 +111,7 @@ WheelDown::  Goto Scroll
 ;f3:: Goto Quit
 
 Scroll:
+	global boost, distance
 	t := A_TimeSincePriorHotkey
 	if (A_PriorHotkey = A_ThisHotkey && t < timeout)
 	{
