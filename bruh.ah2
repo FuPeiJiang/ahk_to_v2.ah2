@@ -10,6 +10,8 @@ currentArr:=[]
 AHK_parse(str) {
     global currentArr
 
+    strBak:=str
+
     c_:=1
     OutputVar_comments:="" ;scope it
     OutputVar_v1str:="" ;scope it
@@ -259,7 +261,7 @@ AHK_parse(str) {
                     } else {
                         ; v1str MsgBox %var%
                         skip_v1str_commaDelim()
-                        argsArr.Push(OutputVar_v1str.0)
+                        argsArr.Push({type: "directive arg", value: OutputVar_v1str.0})
                     }
                     continue
                 case ",":
@@ -271,7 +273,7 @@ AHK_parse(str) {
             }
             ;v1str
             skip_v1str_commaDelim()
-            argsArr.Push(OutputVar_v1str.0)
+            argsArr.Push({type: "directive arg", value: OutputVar_v1str.0})
         }
 
         switch (OutputVar_varName.0), 0 {
@@ -279,7 +281,7 @@ AHK_parse(str) {
             case "#KeyHistory":
                 add_command("KeyHistory", argsArr)
             case "#MaxHotkeysPerInterval":
-                currentArr.Push({type: "binary", op: ":=", left:"A_MaxHotkeysPerInterval", right: argsArr[1]})
+                currentArr.Push({type: "binary", op: ":=", left:{type:"variable", value:"A_MaxHotkeysPerInterval"}, right: argsArr[1]})
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -329,7 +331,7 @@ AHK_parse(str) {
                                 continue
                             case ",":
                                 c_++
-                                argsArr.Push(toPush)
+                                argsArr.Push(toPush ? toPush : {type:"command empty arg"})
                                 toPush:=""
                                 skip_comments()
                                 continue
@@ -359,7 +361,7 @@ AHK_parse(str) {
                         skip_comments()
                         continue
                     }
-                    argsArr.Push(toPush)
+                    argsArr.Push(toPush ? toPush : {type:"command empty arg"})
                     break bruh
                 case "Sleep":
                     boolArr:=[0]
@@ -407,7 +409,8 @@ AHK_parse(str) {
 
                     boolArr:=[0]
                 case "Process":
-                    boolArr:=[0,0,3]
+                    ; boolArr:=[0,0,3]
+                    boolArr:=[2,0,3]
                 case "else":
                     if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "if with block") {
                         currentArr[currentArr.Length].type:="block before else"
@@ -484,7 +487,7 @@ AHK_parse(str) {
                         case ",":
                             c_++
                             argNum++
-                            argsArr.Push(toPush)
+                            argsArr.Push(toPush ? toPush : {type:"command empty arg"})
                             toPush:=""
                             skip_comments()
                             continue
@@ -511,7 +514,7 @@ AHK_parse(str) {
                         break
                     }
                 }
-                argsArr.Push(toPush)
+                argsArr.Push(toPush ? toPush : {type:"command empty arg"})
                 break bruh
 
         }
@@ -520,11 +523,13 @@ AHK_parse(str) {
         switch (OutputVar_varName.0), 0 {
             case "SetBatchLines":
             case "ListLines":
-                switch (argsArr[1]), 0 {
-                    case "`"On`"":
-                        argsArr[1]:="1"
-                    case "`"Off`"":
-                        argsArr[1]:="0"
+                if (argsArr[1].type == "string") {
+                    switch (argsArr[1].value), 0 {
+                        case "On":
+                            argsArr[1]:={type: "number", value: 1}
+                        case "Off":
+                            argsArr[1]:={type: "number", value: 0}
+                    }
                 }
                 add_command(OutputVar_varName.0, argsArr)
             case "MsgBox":
@@ -561,23 +566,26 @@ AHK_parse(str) {
                 }
                 add_command(OutputVar_varName.0, argsArr)
             case "Process":
-                switch (argsArr[1]), 0 {
-                    case "Priority":
-                        tempArr:=[argsArr[3]]
-                        if (argsArr[2]!=="") {
-                            tempArr.Push(argsArr[2])
-                        }
-                        add_command("ProcessSetPriority", tempArr)
+                if (argsArr[1].type=="string") {
+                    switch (argsArr[1].value), 0 {
+                        case "Priority":
+                            tempArr:=[argsArr[3]]
+                            if (argsArr[2].type!=="command empty arg") {
+                                tempArr.Push(argsArr[2])
+                            }
+                            add_command("ProcessSetPriority", tempArr)
+                    }
                 }
             case "Goto":
                 if (currentArr[currentArr.Length].type=="hotkey") {
-                    if (SubStr(argsArr[1],1,1)=="`"") {
-                        currentArr.Push({type: "function call", func: SubStr(argsArr[1],2,-1), args: []})
+                    if (argsArr[1].type=="string") {
+                        argsArr[1].type := "variable"
+                        currentArr.Push({type: "function call", func: argsArr[1], args: []})
                     } else {
-                        currentArr.Push({type: "function call", func: "%" argsArr[1] "%", args: []})
+                        currentArr.Push({type: "function call", func: {type:"variable", value:"%" argsArr[1].value "%"}, args: []})
                     }
                 } else {
-                    if (SubStr(argsArr[1],1,1)=="`"") {
+                    if (argsArr[1].type=="string") {
                         add_command("Goto", [SubStr(argsArr[1],2,-1)])
                     } else {
                         currentArr.Push({type: "function call", func: "Goto", args: [argsArr[1]]})
@@ -585,8 +593,8 @@ AHK_parse(str) {
                 }
             case "SetTimer":
                 if (argsArr.Length >= 2) {
-                    if (argsArr[2]=="`"Off`"") {
-                        argsArr[2]:="0"
+                    if (argsArr[2].type=="string" && argsArr[2].value=="Off") {
+                        argsArr[2]:={type:"number", value:0}
                     }
                 }
                 add_command(OutputVar_varName.0, argsArr)
@@ -610,7 +618,7 @@ AHK_parse(str) {
         ; aa%v%aa%v%aa -> "aa" v "aa" v "aa"
         str:="`"" RegExReplace(str,"%(.*?)%", "`" $1 `"") "`""
         str:=RegExReplace(str,"^`"`" | `"`"$")
-        return str
+        return parse_expression(str)
     }
 
     skip_v1str_commaDelim() {
@@ -640,6 +648,16 @@ AHK_parse(str) {
         } else {
             currentArr.Push(toPush)
         }
+    }
+
+    parse_expression(toParse) {
+        str:=toParse
+        cBak:=c_
+        c_:=1
+        toPush:=value_expression()
+        c_:=cBak
+        str:=strBak
+        return toPush
     }
 
     value_expression() {
@@ -736,7 +754,8 @@ AHK_parse(str) {
                         OutputVar_stringLiteral.1.=after
                     }
                 }
-                left:="`"" StrReplace(OutputVar_stringLiteral.1, "`"`"", "```"") "`""
+                ; left:="`"" StrReplace(OutputVar_stringLiteral.1, "`"`"", "```"") "`""
+                left:={type: "string", value: StrReplace(OutputVar_stringLiteral.1, "`"`"", "```"") }
                 ; string literal
             case "+", "-", "!", "~":
                 c_++
@@ -745,7 +764,8 @@ AHK_parse(str) {
             default:
                 RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
                 c_+=OutputVar_variableName.Len
-                left:=OutputVar_variableName.0
+                ; left:=OutputVar_variableName.0
+                left:={type: "variable", value: OutputVar_variableName.0}
         }
         loop {
             char_:=SubStr(str, c_, 1)
@@ -759,10 +779,10 @@ AHK_parse(str) {
                         char_:=SubStr(str, c_, 1)
                         switch char_ {
                             case ")":
-                                if (Type(left)=="String") {
-                                    switch left, 0 {
+                                if (left.type=="variable") {
+                                    switch left.value, 0 {
                                         case "ComObjCreate":
-                                            left:="ComObject"
+                                            left.value:="ComObject"
                                     }
                                 }
                                 left:={type: "function call", func: left, args: args}
@@ -855,7 +875,7 @@ AHK_parse(str) {
                         case ",", "", "{", ")":
                             return left
                         default:
-                            if (OutputVar_comments.0=="" && SubStr(left,1,1)!=="`"") {
+                            if (OutputVar_comments.0=="" && left.type!=="string") {
                                 return left
                             } else if (InStr(OutputVar_comments.0, "`n", true)) {
                                 return left
@@ -892,7 +912,7 @@ AHK_parse(str) {
             currentArr.RemoveAt(currentArr.Length - blockArr.Length + 1, blockArr.Length)
             labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
             hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
-            currentArr[currentArr.Length] := {type: "function definition", func: currentArr[currentArr.Length].labelName, args:[]}
+            currentArr[currentArr.Length] := {type: "function definition", func: {type:"variable", value:currentArr[currentArr.Length].labelName}, args:[]}
             currentArr.Push({type:"block", statements:blockArr})
         } else if (hotkeyBlockStart <= currentArr.Length && (OutputVar_varName.0="return" || OutputVar_varName.0="exitapp")) {
             if (OutputVar_varName.0="exitapp") {
@@ -920,6 +940,7 @@ AHK_parse(str) {
 
 }
 
+
 ; AHK_parse(FileRead("test.ahk"))
 ; AHK_parse(FileRead("MsgBox.ahk"))
 ; AHK_parse(FileRead("MsgBox_Insane.ahk"))
@@ -935,8 +956,178 @@ AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
 ; AHK_parse(FileRead("string continuation section.ahk"))
+
+globalVarsArr:=[]
+walker_globalVars()
 d currentArr
 
+walker_globalVars() {
+    global globalVarsArr
+    finalStr:=""
+    indent:=""
+
+    do_statements(currentArr)
+    return finalStr
+
+    do_statements(statements) {
+
+        statements_len:=statements.Length + 1
+        k_:=1
+        while (k_ < statements_len) {
+            v_:=statements[k_]
+            finalStr.=indent
+            withNewline()
+            k_++
+        }
+
+        withNewline() {
+            switch v_.type {
+                case "command":
+                    if (v_.args.Length) {
+                        finalStr.=v_._name " " do(v_.args[1])
+                        i_:=2, len:=v_.args.Length + 1
+                        while (i_<len) {
+                            finalStr.=", " do(v_.args[i_])
+                            i_++
+                        }
+                    } else {
+                        finalStr.=v_._name
+                    }
+                    finalStr.="`n"
+                case "hotkey":
+                    finalStr.=v_.keyName
+                case "property access","group","unary", "post-unary assignment", "binary","function call", "ternary"
+                , "comma multi-statement":
+                    finalStr.=do(v_) "`n"
+                case "var scope declaration":
+                    finalStr.=v_.value
+                    v_:=statements[++k_]
+                    if (v_.type == "comma multi-statement") {
+                        finalStr.=" "
+                    } else {
+                        finalStr.="\n"
+                    }
+                    withNewline()
+                case "block":
+                    finalStr.="{`n"
+                    indent.="  "
+                    do_statements(v_.statements)
+                    indent:=SubStr(indent, 3)
+                    finalStr.=indent
+                    finalStr.="}`n"
+                case "block before else":
+                    finalStr.="{`n"
+                    indent.="  "
+                    do_statements(v_.statements)
+                    indent:=SubStr(indent, 3)
+                    finalStr.=indent
+                    finalStr.="} "
+                case "function definition":
+                    finalStr.=do(v_) " "
+                    v_:=statements[++k_]
+                    withNewline()
+                case "condition with block":
+                    finalStr.=do(v_.expr) " "
+                case "if with block":
+                    finalStr.="if "
+                    v_:=statements[++k_]
+                    withNewline()
+                    v_:=statements[++k_]
+                    withNewline()
+                case "if without block":
+                    finalStr.="if "
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
+                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else with block")) {
+                        finalStr.=indent
+                        v_:=statements[++k_]
+                        withNewline()
+                    }
+                case "else with block":
+                    finalStr.="else "
+                    v_:=statements[++k_]
+                    withNewline()
+                case "catch with block":
+                    finalStr.="catch "
+                    v_:=statements[++k_]
+                    withNewline()
+                case "else without block":
+                    finalStr.="else"
+                    finalStr.="`n"
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
+                case "try without block":
+                    finalStr.="try"
+                    finalStr.="`n"
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
+                case "label":
+                    finalStr.=v_.labelName ":`n"
+            }
+        }
+    }
+
+    do(v_) {
+        if (Type(v_)=="String") {
+            MsgBox "This Should Never Happen: " v_
+            return v_
+        }
+        switch v_.type {
+            case "first var scope":
+                return do(v_.value)
+            case "property access":
+                return do(v_.parent) "." v_.propName
+            case "group":
+                return "(" do(v_.value) ")"
+            case "pre-unary":
+                return v_.op do(v_.right)
+            case "post-unary assignment":
+                return do(v_.left) v_.op
+            case "binary":
+                return do(v_.left) " " v_.op " " do(v_.right)
+            case "comma multi-statement":
+                return do(v_.left) ", " do(v_.right)
+            case "ternary":
+                return do(v_.condition) " ? " do(v_.ifTrue) " : " do(v_.ifFalse)
+            case "concat":
+                return do(v_.left) (v_.op == "" ? " " : v_.op) do(v_.right)
+            case "function call", "function definition":
+                argsStr:=""
+                if (v_.args.Length) {
+                    argsStr.=do(v_.args[1])
+                    i_:=2, len:=v_.args.Length + 1
+                    while (i_<len) {
+                        argsStr.=", " do(v_.args[i_])
+                        i_++
+                    }
+                }
+                return do(v_.func) "(" argsStr ")"
+            case "object":
+                argsStr:=""
+                if (v_.keys.Length) {
+                    argsStr.=do(v_.keys[1]) ":" do(v_.values[1])
+                    i_:=2, len:=v_.keys.Length + 1
+                    while (i_<len) {
+                        argsStr.=", " do(v_.keys[i_]) ":" do(v_.values[i_])
+                        i_++
+                    }
+                }
+                return "{" argsStr "}"
+        }
+    }
+}
 
 what() {
     finalStr:=""
@@ -1057,9 +1248,16 @@ what() {
 
     do(v_) {
         if (Type(v_)=="String") {
+            MsgBox "This Should Never Happen: " v_
             return v_
         }
         switch v_.type {
+            case "command empty arg":
+                return ""
+            case "variable", "directive arg", "number":
+                return v_.value
+            case "string":
+                return "`"" v_.value "`""
             case "first var scope":
                 return do(v_.value)
             case "property access":
@@ -1101,6 +1299,7 @@ what() {
                 }
                 return "{" argsStr "}"
         }
+        MsgBox "Switch .type not matched {ejf90u2349r8u3} : " v_.type
     }
 }
 
