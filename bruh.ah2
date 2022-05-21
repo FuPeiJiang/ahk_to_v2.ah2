@@ -763,9 +763,18 @@ AHK_parse(str) {
                 left:={type: "pre-unary", op: char2, right: value_expression()}
             default:
                 RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
-                c_+=OutputVar_variableName.Len
                 ; left:=OutputVar_variableName.0
-                left:={type: "variable", value: OutputVar_variableName.0}
+                if (OutputVar_variableName.0 ~= "^[0-9]*$") {
+                    RegExMatch(str, "(?![.+]$)\+?\d*(?:\.\d*)?", &OutputVar_variableName, c_)
+                    if (OutputVar_variableName.Len == 0) {
+                        MsgBox "what is this? parsing number here"
+                    }
+                    left:={type: "number", value: OutputVar_variableName.0}
+                } else {
+                    left:={type: "variable", value: OutputVar_variableName.0}
+                }
+                c_+=OutputVar_variableName.Len
+
         }
         loop {
             char_:=SubStr(str, c_, 1)
@@ -957,12 +966,18 @@ AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
 ; AHK_parse(FileRead("string continuation section.ahk"))
 
-globalVarsArr:=[]
-walker_globalVars()
-d currentArr
 
-walker_globalVars() {
-    global globalVarsArr
+superGlobalVarsMap:=Map()
+superGlobalVarsMap.CaseSense:="Off"
+superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
+    ,"A_MaxHotkeysPerInterval","A_MaxHotkeysPerInterval"
+    ,"A_TimeSincePriorHotkey","A_TimeSincePriorHotkey"
+    ,"A_PriorHotkey","A_PriorHotkey"
+    ,"A_ThisHotkey","A_ThisHotkey"
+)
+
+walker_superGlobalVars() {
+    global superGlobalVarsMap
     finalStr:=""
     indent:=""
 
@@ -1023,9 +1038,11 @@ walker_globalVars() {
                     finalStr.=indent
                     finalStr.="} "
                 case "function definition":
+                    if (v_.func.type=="variable") {
+                        superGlobalVarsMap[v_.func.value]:=v_.func.value
+                    }
                     finalStr.=do(v_) " "
                     v_:=statements[++k_]
-                    withNewline()
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
                 case "if with block":
@@ -1128,6 +1145,196 @@ walker_globalVars() {
         }
     }
 }
+
+walker_superGlobalVars()
+superGlobalVarsArr:=[]
+for k_ in superGlobalVarsMap {
+    superGlobalVarsArr.Push(k_)
+}
+d superGlobalVarsArr
+
+globalVarsMap:=Map()
+globalVarsMap.CaseSense:="Off"
+
+walker_globalVars() {
+    global globalVarsMap
+    finalStr:=""
+    indent:=""
+
+    do_statements(currentArr)
+    return finalStr
+
+    do_statements(statements) {
+
+        statements_len:=statements.Length + 1
+        k_:=1
+        while (k_ < statements_len) {
+            v_:=statements[k_]
+            finalStr.=indent
+            withNewline()
+            k_++
+        }
+
+        withNewline() {
+            switch v_.type {
+                case "command":
+                    if (v_.args.Length) {
+                        finalStr.=v_._name " " do(v_.args[1])
+                        i_:=2, len:=v_.args.Length + 1
+                        while (i_<len) {
+                            finalStr.=", " do(v_.args[i_])
+                            i_++
+                        }
+                    } else {
+                        finalStr.=v_._name
+                    }
+                    finalStr.="`n"
+                case "hotkey":
+                    finalStr.=v_.keyName
+                case "property access","group","unary", "post-unary assignment", "binary","function call", "ternary"
+                , "comma multi-statement":
+                    finalStr.=do(v_) "`n"
+                case "var scope declaration":
+                    finalStr.=v_.value
+                    v_:=statements[++k_]
+                    if (v_.type == "comma multi-statement") {
+                        finalStr.=" "
+                    } else {
+                        finalStr.="\n"
+                    }
+                    withNewline()
+                case "block":
+                    finalStr.="{`n"
+                    indent.="  "
+                    do_statements(v_.statements)
+                    indent:=SubStr(indent, 3)
+                    finalStr.=indent
+                    finalStr.="}`n"
+                case "block before else":
+                    finalStr.="{`n"
+                    indent.="  "
+                    do_statements(v_.statements)
+                    indent:=SubStr(indent, 3)
+                    finalStr.=indent
+                    finalStr.="} "
+                case "function definition":
+                    finalStr.=do(v_) " "
+                    v_:=statements[++k_]
+                case "condition with block":
+                    finalStr.=do(v_.expr) " "
+                case "if with block":
+                    finalStr.="if "
+                    v_:=statements[++k_]
+                    withNewline()
+                    v_:=statements[++k_]
+                    withNewline()
+                case "if without block":
+                    finalStr.="if "
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
+                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else with block")) {
+                        finalStr.=indent
+                        v_:=statements[++k_]
+                        withNewline()
+                    }
+                case "else with block":
+                    finalStr.="else "
+                    v_:=statements[++k_]
+                    withNewline()
+                case "catch with block":
+                    finalStr.="catch "
+                    v_:=statements[++k_]
+                    withNewline()
+                case "else without block":
+                    finalStr.="else"
+                    finalStr.="`n"
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
+                case "try without block":
+                    finalStr.="try"
+                    finalStr.="`n"
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
+                case "label":
+                    finalStr.=v_.labelName ":`n"
+            }
+        }
+    }
+
+    do(v_) {
+        if (Type(v_)=="String") {
+            MsgBox "This Should Never Happen: " v_
+            return v_
+        }
+        switch v_.type {
+            case "variable":
+                if (!superGlobalVarsMap.Has(v_.value)) {
+                    globalVarsMap[v_.value]:=v_.value
+                }
+            case "first var scope":
+                return do(v_.value)
+            case "property access":
+                return do(v_.parent) "." v_.propName
+            case "group":
+                return "(" do(v_.value) ")"
+            case "pre-unary":
+                return v_.op do(v_.right)
+            case "post-unary assignment":
+                return do(v_.left) v_.op
+            case "binary":
+                return do(v_.left) " " v_.op " " do(v_.right)
+            case "comma multi-statement":
+                return do(v_.left) ", " do(v_.right)
+            case "ternary":
+                return do(v_.condition) " ? " do(v_.ifTrue) " : " do(v_.ifFalse)
+            case "concat":
+                return do(v_.left) (v_.op == "" ? " " : v_.op) do(v_.right)
+            case "function call":
+                argsStr:=""
+                if (v_.args.Length) {
+                    argsStr.=do(v_.args[1])
+                    i_:=2, len:=v_.args.Length + 1
+                    while (i_<len) {
+                        argsStr.=", " do(v_.args[i_])
+                        i_++
+                    }
+                }
+                return do(v_.func) "(" argsStr ")"
+            case "object":
+                argsStr:=""
+                if (v_.keys.Length) {
+                    argsStr.=do(v_.keys[1]) ":" do(v_.values[1])
+                    i_:=2, len:=v_.keys.Length + 1
+                    while (i_<len) {
+                        argsStr.=", " do(v_.keys[i_]) ":" do(v_.values[i_])
+                        i_++
+                    }
+                }
+                return "{" argsStr "}"
+        }
+    }
+}
+
+walker_globalVars()
+globalVarsArr:=[]
+for k_ in globalVarsMap {
+    globalVarsArr.Push(k_)
+}
+d globalVarsArr
+
+d currentArr
 
 what() {
     finalStr:=""
