@@ -82,3 +82,28 @@ foo()
 when reach (, it's a function,
 backtrack to |foo()
 use skip_expression()
+
+regex replace:
+do\((\w*)\.(\w*)\)
+do($1, "$2")
+
+do\((.*?)\[(\w*)\]\)
+do($1, $2)
+normal replace:
+do(v_)
+do(statements, k_)
+
+currently replacing:
+    case "ComObjCreate":
+doing:
+    case "VarSetCapacity":
+
+func1() {
+    func2a() {
+        func3a() {
+            func2b()
+        }
+    }
+    func2b() {
+    }
+}
