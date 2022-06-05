@@ -1,0 +1,4 @@
+A_LoopFileFullPath:=A_LoopFileFullPath
+A_LoopFileLongPath:=A_LoopFileLongPath
+Clipboard:=Clipboard
+Comspec:=Comspec
