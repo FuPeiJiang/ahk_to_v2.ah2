@@ -679,122 +679,139 @@ AHK_parse(str) {
         ; object literal, array literal
         ; ++assignment
         ; -unary minus
-
-        char2:=SubStr(str, c_, 1)
-        switch char2 {
-            case "(":
-                ; group
-                c_++
-                skip_comments()
-                left:={type: "group", value: value_expression()}
-                c_++
-            case "{":
-                ; object literal
-                c_++
-                skip_comments()
-                keys:=[]
-                values:=[]
-                loop {
-                    char_:=SubStr(str, c_, 1)
-                        switch char_ {
-                            case "}":
-                                left:={type: "object", keys: keys, values: values}
-                                c_++
-                                break
-                            case ":":
-                                c_++
-                                skip_comments()
-                                values.Push(value_expression())
-                                continue
-                            case ",":
-                                c_++
-                                skip_comments()
+        loop 1 {
+            char2:=SubStr(str, c_, 1)
+            switch char2 {
+                case "(":
+                    ; group
+                    c_++
+                    skip_comments()
+                    left:={type: "group", value: value_expression()}
+                    c_++
+                    break
+                case "{":
+                    ; object literal
+                    c_++
+                    skip_comments()
+                    keys:=[]
+                    values:=[]
+                    loop {
+                        char_:=SubStr(str, c_, 1)
+                            switch char_ {
+                                case "}":
+                                    left:={type: "object", keys: keys, values: values}
+                                    c_++
+                                    break
+                                case ":":
+                                    c_++
+                                    skip_comments()
+                                    values.Push(value_expression())
+                                    continue
+                                case ",":
+                                    c_++
+                                    skip_comments()
+                            }
+                        toPush:=value_expression()
+                        if (toPush.type == "variable") {
+                            toPush.type:="obj key"
                         }
-                    keys.Push(value_expression())
-                }
-            case "[":
-                ; array literal
-                ; left:=OutputVar_variableName
-            case "`"":
-                if (string_continuation_section_options==false) {
-                    RegExMatch(str, "((?:[ \t]+(?=;)(*ACCEPT)|`"`"|[^`"\n]|\n(*ACCEPT))*)(`")", &OutputVar_stringLiteral, c_ + 1)
-                    c_:=c_ + 1 + OutputVar_stringLiteral.Len
+                        keys.Push(toPush)
 
-
-                    if (!OutputVar_stringLiteral.2) {
-                        before:=RTrim(OutputVar_stringLiteral.1)
-                        ; string continuation section
-                        c_--
-                        RegExMatch(str, "(?:(?:^|\s);.*|\/\*[\s\S]*?\n[ \t]*\*\/|\s)*", &OutputVar_innerComments, c_)
-                        c_+=OutputVar_innerComments.Len
-                        pos_newline:=InStr(str, "`n", true, c_)
-                        string_continuation_section_options:=SubStr(str, c_ + 1, pos_newline - (c_ + 1))
-
-                        RegExMatch(str, "((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, pos_newline + 1)
-                        c_:=pos_newline + 1 + OutputVar_stringLiteral.Len
-
-                        OutputVar_stringLiteral.1:=before OutputVar_stringLiteral.1
-
-                        if (InStr(string_continuation_section_options, "LTrim")) {
-                            OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "^[ \t]*")
-                        }
-                        if (pos_join:=InStr(string_continuation_section_options, "Join")) {
-                            pos_space:=InStr(string_continuation_section_options, " ", true, pos_join + 4) || StrLen(string_continuation_section_options)
-                            string_continuation_section_JoinWith:=SubStr(string_continuation_section_options, pos_join + 4, pos_space - (pos_join + 4) + 1)
-                            string_continuation_section_JoinWith:=StrReplace(string_continuation_section_JoinWith, "``s", " ", true)
-                        } else {
-                            string_continuation_section_JoinWith:="``n"
-                        }
                     }
-                } else {
-                    RegExMatch(str, "((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, c_ + 1)
-                    c_:=c_ + 1 + OutputVar_stringLiteral.Len
-
-                }
-                OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "(?<!``);", "```;")
-
-                if (string_continuation_section_options!==false) {
-                    if (pos_newlineBefore:=RegExMatch(OutputVar_stringLiteral.1, "\n[ \t]*\)", &OutputVar_EndContinuationSection)) {
-                        after:=SubStr(OutputVar_stringLiteral.1, pos_newlineBefore + OutputVar_EndContinuationSection.Len)
-                        OutputVar_stringLiteral.1:=SubStr(OutputVar_stringLiteral.1, 1, pos_newlineBefore - 1)
-                        string_continuation_section_options:=false
-                    }
-                    if (InStr(string_continuation_section_options, "LTrim")) {
-                        OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "\n[ \t]*", "`n")
-                    }
-                    OutputVar_stringLiteral.1:=StrReplace(OutputVar_stringLiteral.1, "`n", string_continuation_section_JoinWith, true)
-
+                    break
+                case "[":
+                    ; array literal
+                    ; left:=OutputVar_variableName
+                case "`"":
                     if (string_continuation_section_options==false) {
-                        OutputVar_stringLiteral.1.=after
-                    }
-                }
-                ; left:="`"" StrReplace(OutputVar_stringLiteral.1, "`"`"", "```"") "`""
-                left:={type: "string", value: StrReplace(OutputVar_stringLiteral.1, "`"`"", "```"") }
-                ; string literal
-            case "+", "-", "!", "~", "&":
-                c_++
-                skip_comments()
-                left:={type: "pre-unary", op: char2, right: value_expression()}
-            default:
-                RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
-                ; left:=OutputVar_variableName.0
-                if (OutputVar_variableName.0 ~= "(?i)^0x[0-9A-F]*$") {
-                    left:={type: "hex number", value: OutputVar_variableName.0}
-                } else {
-                    if (OutputVar_variableName.0 ~= "^[0-9]*$") {
-                        RegExMatch(str, "(?![.+]$)\+?\d*(?:\.\d*)?", &OutputVar_variableNameWhat, c_)
-                        if (OutputVar_variableNameWhat.Len == 0) {
-                            MsgBox "what is this? parsing number here"
-                        }
-                        left:={type: "number", value: OutputVar_variableNameWhat.0}
-                        OutputVar_variableName:=OutputVar_variableNameWhat
-                    } else {
-                        left:={type: "variable", value: OutputVar_variableName.0}
-                    }
-                }
-                c_+=OutputVar_variableName.Len
+                        RegExMatch(str, "((?:[ \t]+(?=;)(*ACCEPT)|`"`"|[^`"\n]|\n(*ACCEPT))*)(`")", &OutputVar_stringLiteral, c_ + 1)
+                        c_:=c_ + 1 + OutputVar_stringLiteral.Len
 
+
+                        if (!OutputVar_stringLiteral.2) {
+                            before:=RTrim(OutputVar_stringLiteral.1)
+                            ; string continuation section
+                            c_--
+                            RegExMatch(str, "(?:(?:^|\s);.*|\/\*[\s\S]*?\n[ \t]*\*\/|\s)*", &OutputVar_innerComments, c_)
+                            c_+=OutputVar_innerComments.Len
+                            pos_newline:=InStr(str, "`n", true, c_)
+                            string_continuation_section_options:=SubStr(str, c_ + 1, pos_newline - (c_ + 1))
+
+                            RegExMatch(str, "((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, pos_newline + 1)
+                            c_:=pos_newline + 1 + OutputVar_stringLiteral.Len
+
+                            OutputVar_stringLiteral.1:=before OutputVar_stringLiteral.1
+
+                            if (InStr(string_continuation_section_options, "LTrim")) {
+                                OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "^[ \t]*")
+                            }
+                            if (pos_join:=InStr(string_continuation_section_options, "Join")) {
+                                pos_space:=InStr(string_continuation_section_options, " ", true, pos_join + 4) || StrLen(string_continuation_section_options)
+                                string_continuation_section_JoinWith:=SubStr(string_continuation_section_options, pos_join + 4, pos_space - (pos_join + 4) + 1)
+                                string_continuation_section_JoinWith:=StrReplace(string_continuation_section_JoinWith, "``s", " ", true)
+                            } else {
+                                string_continuation_section_JoinWith:="``n"
+                            }
+                        }
+                    } else {
+                        RegExMatch(str, "((?:`"`"|[^`"])*)`"", &OutputVar_stringLiteral, c_ + 1)
+                        c_:=c_ + 1 + OutputVar_stringLiteral.Len
+
+                    }
+                    OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "(?<!``);", "```;")
+
+                    if (string_continuation_section_options!==false) {
+                        if (pos_newlineBefore:=RegExMatch(OutputVar_stringLiteral.1, "\n[ \t]*\)", &OutputVar_EndContinuationSection)) {
+                            after:=SubStr(OutputVar_stringLiteral.1, pos_newlineBefore + OutputVar_EndContinuationSection.Len)
+                            OutputVar_stringLiteral.1:=SubStr(OutputVar_stringLiteral.1, 1, pos_newlineBefore - 1)
+                            string_continuation_section_options:=false
+                        }
+                        if (InStr(string_continuation_section_options, "LTrim")) {
+                            OutputVar_stringLiteral.1:=RegExReplace(OutputVar_stringLiteral.1, "\n[ \t]*", "`n")
+                        }
+                        OutputVar_stringLiteral.1:=StrReplace(OutputVar_stringLiteral.1, "`n", string_continuation_section_JoinWith, true)
+
+                        if (string_continuation_section_options==false) {
+                            OutputVar_stringLiteral.1.=after
+                        }
+                    }
+                    ; left:="`"" StrReplace(OutputVar_stringLiteral.1, "`"`"", "```"") "`""
+                    left:={type: "string", value: StrReplace(OutputVar_stringLiteral.1, "`"`"", "```"") }
+                    ; string literal
+                    break
+                case "+", "-", "!", "~", "&":
+                    c_++
+                    skip_comments()
+                    left:={type: "pre-unary", op: char2, right: value_expression()}
+                    break
+                case "n":
+                    word_:=SubStr(str, c_, 3)
+                    if (word_=="not") {
+                        c_+=3
+                        skip_comments()
+                        left:={type: "pre-unary", op: "not", right: value_expression()}
+                        break
+                    }
+                }
+            RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
+            ; left:=OutputVar_variableName.0
+            if (OutputVar_variableName.0 ~= "(?i)^0x[0-9A-F]*$") {
+                left:={type: "hex number", value: OutputVar_variableName.0}
+            } else {
+                if (OutputVar_variableName.0 ~= "^[0-9]*$") {
+                    RegExMatch(str, "(?![.+]$)\+?\d*(?:\.\d*)?", &OutputVar_variableNameWhat, c_)
+                    if (OutputVar_variableNameWhat.Len == 0) {
+                        MsgBox "what is this? parsing number here"
+                    }
+                    left:={type: "number", value: OutputVar_variableNameWhat.0}
+                    OutputVar_variableName:=OutputVar_variableNameWhat
+                } else {
+                    left:={type: "variable", value: OutputVar_variableName.0}
+                }
+            }
+            c_+=OutputVar_variableName.Len
         }
+
         loop {
             char_:=SubStr(str, c_, 1)
             switch char_ {
@@ -971,7 +988,9 @@ AHK_parse(str) {
         } else {
             lowered:=StrLower(OutputVar_varName.0)
             switch lowered {
-                case "local", "global", "static":
+                ; single local is an error, local is assumed ?
+                case "local":
+                case "global", "static":
                     add_command(lowered, [])
                 default:
                     add_command(OutputVar_varName.0, [])
@@ -997,10 +1016,10 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
 ; AHK_parse(FileRead("string continuation section.ahk"))
-; AHK_parse(FileRead("RunCMD.ahk"))
+AHK_parse(FileRead("RunCMD.ahk"))
 ; AHK_parse(FileRead("File.ReadLine.ahk"))
 ; AHK_parse(FileRead("Clipboard A_Clipboard.ahk"))
-AHK_parse(FileRead("while.ahk"))
+; AHK_parse(FileRead("while.ahk"))
 
 
 superGlobalVarsMap:=Map()
@@ -1023,6 +1042,7 @@ superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
     ; functions
     ,"ComObject","ComObject"
     ,"DllCall","DllCall"
+    ,"Buffer","Buffer"
     ,"StrLen","StrLen"
     ,"SubStr","SubStr"
     ,"Floor","Floor"
@@ -1030,9 +1050,10 @@ superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
     ,"Format","Format"
     ,"NumGet","NumGet"
     ,"NumPut","NumPut"
-    ;to ignore
-    ,"and","and"
-    ,"not","not"
+    ,"HasMethod","HasMethod"
+    ,"StrPtr","StrPtr"
+    ,"True","True"
+    ,"False","False"
 )
 
 walker_superGlobalVars() {
@@ -1481,9 +1502,9 @@ walker_replacer() {
                 case "function definition":
                     finalStr.=do(statements, k_) " "
 
-                    functionScopes.Push(currentScope)
                     currentScope:=Map()
                     currentScope.CaseSense:="Off"
+                    functionScopes.Push(currentScope)
 
                     v_:=statements[++k_]
                     withNewline()
@@ -1593,7 +1614,7 @@ walker_replacer() {
                             }
                     }
                     return
-                case "directive arg", "number", "hex number":
+                case "directive arg", "number", "hex number", "obj key", "double-deref":
                     return t_.value
                 case "string":
                     return "`"" t_.value "`""
@@ -1604,10 +1625,46 @@ walker_replacer() {
                 case "group":
                     return "(" do(t_, "value") ")"
                 case "pre-unary":
+                    if (t_.op == "&") {
+                       _var:=t_.right
+                        for _scope in functionScopes {
+                            if (_scope.Has(_var.value)) {
+                                switch _scope[_var.value] {
+                                    case "string so StrPtr":
+                                        ; &var -> StrPtr(var)
+                                        replacement:={args:[_var], func:{type:"variable", value:"StrPtr"}, type:"function call"}
+                                        if (Type(obj) == "Object") {
+                                            obj.%key%:=replacement
+                                        } else {
+                                            obj[key]:=replacement
+                                        }
+                                        return do(obj, key)
+                                    case "Buffer with Ptr":
+                                        ; &var -> var
+                                        if (Type(obj) == "Object") {
+                                            obj.%key%:=_var
+                                        } else {
+                                            obj[key]:=_var
+                                        }
+                                        return do(obj, key)
+                                }
+                            }
+                        }
+                        MsgBox "not anything 23534539uwjegi"
+                    }
+                    return t_.op do(t_, "right")
+                case "v2 pre-unary":
                     return t_.op do(t_, "right")
                 case "post-unary assignment":
                     return do(t_, "left") t_.op
                 case "binary":
+                    if (t_.op == ":=") {
+                        switch t_.right.type {
+                            case "string", "concat":
+                                currentScope[t_.left.value]:="string so StrPtr"
+                            ; SubStr too
+                        }
+                    }
                     return do(t_, "left") " " t_.op " " do(t_, "right")
                 case "comma multi-statement":
                     return do(t_, "left") ", " do(t_, "right")
@@ -1621,11 +1678,74 @@ walker_replacer() {
                             switch t_.func.value, 0 {
                                 case "VarSetCapacity":
                                     var_:=t_.args.RemoveAt(1)
+                                    currentScope[var_.value]:="Buffer with Ptr"
                                     replacement:={left:var_, op:":=", right:{args:t_.args, func:{type:"variable", value:"Buffer"}, type:"function call"}, type:"binary"}
                                     if (Type(obj) == "Object") {
                                         obj.%key%:=replacement
                                     } else {
                                         obj[key]:=replacement
+                                    }
+                                case "Func":
+                                    var_:=t_.args[1]
+                                    var_.value:="%" var_.value "%"
+                                    var_.type:="double-deref"
+                                    if (Type(obj) == "Object") {
+                                        obj.%key%:=var_
+                                    } else {
+                                        obj[key]:=var_
+                                    }
+                                case "IsFunc":
+                                    ; https://www.autohotkey.com/boards/viewtopic.php?style=19&f=13&t=96863#p431844
+                                    var_:=t_.args[1]
+                                    replacement:={args:[{type:"double-deref", value:"%" var_.value "%"}], func:{type:"variable", value:"HasMethod"}, type:"function call"}
+                                    ; replacement:={args:[var_], func:{type:"variable", value:"IsSet"}, type:"function call"}
+                                    ; {type:"group", value:{}}
+                                    if (Type(obj) == "Object") {
+                                        obj.%key%:=replacement
+                                    } else {
+                                        obj[key]:=replacement
+                                    }
+                                case "NumPut":
+                                    switch t_.args.length {
+                                        case 2:
+                                            replacementArr:=[{type:"string", value:"Ptr"}, t_.args[1], t_.args[2]]
+                                        case 3:
+                                            if (t_.args[2].type == "string") {
+                                                replacementArr:=[t_.args[3], t_.args[1], t_.args[2]]
+                                            } else {
+                                                replacementArr:=[{type:"string", value:"Ptr"}, t_.args[1], t_.args[2], t_.args[3]]
+                                            }
+                                        case 4:
+                                            replacementArr:=[t_.args[4], t_.args[1], t_.args[2], t_.args[3]]
+                                        default:
+                                            MsgBox "fnwioehfoiwehfoi"
+                                    }
+                                    t_.args:=replacementArr
+                                case "NumGet":
+                                    switch t_.args.length {
+                                        case 2:
+                                            replacementArr:=[t_.args[1], t_.args[2], {type:"string", value:"Ptr"}]
+                                        case 3:
+                                            replacementArr:=t_.args
+                                        default:
+                                            MsgBox "jhoerkhojeroihji"
+                                    }
+                                    t_.args:=replacementArr
+                                case "DllCall":
+                                    i_:=2
+                                    while (i_ < t_.args.length) {
+                                        ; last character == "*" or "P"
+                                        switch SubStr(t_.args[i_].value, -1), 0 {
+                                            case "*", "P":
+                                                switch t_.args[i_ + 1].type {
+                                                    case "variable":
+                                                        t_.args[i_ + 1]:={type:"v2 pre-unary", op:"&", right:t_.args[i_ + 1]}
+                                                    case "binary":
+                                                        t_.args[i_ + 1]:={type:"v2 pre-unary", op:"&", right:t_.args[i_ + 1]}
+                                                }
+                                        }
+
+                                        i_+=2
                                     }
                             }
                         case "property access":
@@ -1660,6 +1780,11 @@ walker_replacer() {
                     return do(t_, "func") "(" argsStr ")"
                 case "object":
                     argsStr:=""
+                    for i_, e_ in t_.keys {
+                        if (e_.type == "string") {
+                            e_.type:="obj key"
+                        }
+                    }
                     if (t_.keys.Length) {
                         argsStr.=do(t_.keys, 1) ":" do(t_.values, 1)
                         i_:=2, len:=t_.keys.Length + 1
@@ -1872,7 +1997,7 @@ walker_undefinedVars() {
         }
 
         do(obj, key) {
-            t_:=obj[key]
+            t_:=Type(obj) == "Object" ? obj.%key% : obj[key]
             if (Type(t_)=="String") {
                 MsgBox "This Should Never Happen: " t_
                 return t_
@@ -1902,6 +2027,14 @@ walker_undefinedVars() {
                 case "group":
                     return "(" do(t_, "value") ")"
                 case "pre-unary":
+                    return t_.op do(t_, "right")
+                case "v2 pre-unary": ;assume only &
+                    switch t_.right.type {
+                        case "variable":
+                            currentScope[t_.right.value]:=t_.right.value
+                        case "binary":
+                            currentScope[t_.right.left.value]:=t_.right.left.value
+                    }
                     return t_.op do(t_, "right")
                 case "post-unary assignment":
                     return do(t_, "left") t_.op
@@ -2084,7 +2217,7 @@ what() {
             switch t_.type {
                 case "command empty arg":
                     return ""
-                case "variable", "directive arg", "number", "hex number":
+                case "variable", "directive arg", "number", "hex number", "obj key", "double-deref":
                     return t_.value
                 case "string":
                     return "`"" t_.value "`""
@@ -2094,8 +2227,12 @@ what() {
                     return do(t_.parent) "." t_.propName
                 case "group":
                     return "(" do(t_.value) ")"
-                case "pre-unary":
-                    return t_.op do(t_.right)
+                case "pre-unary", "v2 pre-unary":
+                    if (t_.op == "not") {
+                        return t_.op " " do(t_.right)
+                    } else {
+                        return t_.op do(t_.right)
+                    }
                 case "post-unary assignment":
                     return do(t_.left) t_.op
                 case "binary":
