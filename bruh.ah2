@@ -132,7 +132,7 @@ AHK_parse(str) {
                             ; if statement
                             skip_comments()
                             toPush:=value_expression()
-                            if (Type(toPush)=="String") {
+                            if (toPush.type == "variable") {
                                 toPush:={type: "group", value: toPush}
                             }
                             char_:=SubStr(str, c_, 1)
@@ -439,6 +439,20 @@ AHK_parse(str) {
                     toPush:=value_expression()
                     if (toPush) {
                         currentArr.Push({type:"first var scope", value:toPush})
+                    }
+                    return
+                case "while":
+                    toPush:=value_expression()
+                    if (toPush.type == "variable") {
+                        toPush:={type: "group", value: toPush}
+                    }
+                    char_:=SubStr(str, c_, 1)
+                    if (char_=="{") {
+                        currentArr.Push({type:"while with block"})
+                        currentArr.Push({type: "condition with block",expr:toPush})
+                    } else {
+                        currentArr.Push({type:"while without block"})
+                        currentArr.Push(toPush)
                     }
                     return
                 default:
@@ -888,14 +902,27 @@ AHK_parse(str) {
                             return ""
                         case ",", "", "{", "}", ")":
                             return left
-                        default:
-                            if (OutputVar_comments.0=="" && left.type!=="string") {
-                                return left
-                            } else if (InStr(OutputVar_comments.0, "`n", true)) {
-                                return left
-                            } else {
-                                return {type: "concat", op: OutputVar_comments.0, left:left, right: value_expression()}
+                        case "a":
+                            word_:=SubStr(str, c_, 3)
+                            if (word_="and") {
+                                c_+=3
+                                skip_comments() ;assuming not newline word
+                                return {type: "binary", op: "and", left:left, right: value_expression()}
                             }
+                        case "o":
+                            word_:=SubStr(str, c_, 2)
+                            if (word_="or") {
+                                c_+=2
+                                skip_comments() ;assuming not newline word
+                                return {type: "binary", op: "or", left:left, right: value_expression()}
+                            }
+                    }
+                    if (OutputVar_comments.0=="" && left.type!=="string") {
+                        return left
+                    } else if (InStr(OutputVar_comments.0, "`n", true)) {
+                        return left
+                    } else {
+                        return {type: "concat", op: OutputVar_comments.0, left:left, right: value_expression()}
                     }
 
             }
@@ -972,7 +999,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("string continuation section.ahk"))
 ; AHK_parse(FileRead("RunCMD.ahk"))
 ; AHK_parse(FileRead("File.ReadLine.ahk"))
-AHK_parse(FileRead("Clipboard A_Clipboard.ahk"))
+; AHK_parse(FileRead("Clipboard A_Clipboard.ahk"))
+AHK_parse(FileRead("while.ahk"))
 
 
 superGlobalVarsMap:=Map()
@@ -1000,10 +1028,7 @@ superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
     ,"Floor","Floor"
     ,"FileOpen","FileOpen"
     ,"Format","Format"
-    ,"Func","Func"
-    ,"IsFunc","IsFunc"
     ,"NumGet","NumGet"
-    ,"VarSetCapacity","VarSetCapacity"
     ,"NumPut","NumPut"
     ;to ignore
     ,"and","and"
@@ -1094,6 +1119,22 @@ walker_superGlobalVars() {
                         v_:=statements[++k_]
                         withNewline()
                     }
+                case "while with block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+                    v_:=statements[++k_]
+                    withNewline()
+                case "while without block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
                 case "else with block":
                     finalStr.="else "
                     v_:=statements[++k_]
@@ -1122,56 +1163,56 @@ walker_superGlobalVars() {
                     finalStr.=v_.labelName ":`n"
             }
         }
+        do(t_) {
+            if (Type(t_)=="String") {
+                MsgBox "This Should Never Happen: " t_
+                return t_
+            }
+            switch t_.type {
+                case "first var scope":
+                    return do(t_.value)
+                case "property access":
+                    return do(t_.parent) "." t_.propName
+                case "group":
+                    return "(" do(t_.value) ")"
+                case "pre-unary":
+                    return t_.op do(t_.right)
+                case "post-unary assignment":
+                    return do(t_.left) t_.op
+                case "binary":
+                    return do(t_.left) " " t_.op " " do(t_.right)
+                case "comma multi-statement":
+                    return do(t_.left) ", " do(t_.right)
+                case "ternary":
+                    return do(t_.condition) " ? " do(t_.ifTrue) " : " do(t_.ifFalse)
+                case "concat":
+                    return do(t_.left) (t_.op == "" ? " " : t_.op) do(t_.right)
+                case "function call", "function definition":
+                    argsStr:=""
+                    if (t_.args.Length) {
+                        argsStr.=do(t_.args[1])
+                        i_:=2, len:=t_.args.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.args[i_])
+                            i_++
+                        }
+                    }
+                    return do(t_.func) "(" argsStr ")"
+                case "object":
+                    argsStr:=""
+                    if (t_.keys.Length) {
+                        argsStr.=do(t_.keys[1]) ":" do(t_.values[1])
+                        i_:=2, len:=t_.keys.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.keys[i_]) ":" do(t_.values[i_])
+                            i_++
+                        }
+                    }
+                    return "{" argsStr "}"
+            }
+        }
     }
 
-    do(v_) {
-        if (Type(v_)=="String") {
-            MsgBox "This Should Never Happen: " v_
-            return v_
-        }
-        switch v_.type {
-            case "first var scope":
-                return do(v_.value)
-            case "property access":
-                return do(v_.parent) "." v_.propName
-            case "group":
-                return "(" do(v_.value) ")"
-            case "pre-unary":
-                return v_.op do(v_.right)
-            case "post-unary assignment":
-                return do(v_.left) v_.op
-            case "binary":
-                return do(v_.left) " " v_.op " " do(v_.right)
-            case "comma multi-statement":
-                return do(v_.left) ", " do(v_.right)
-            case "ternary":
-                return do(v_.condition) " ? " do(v_.ifTrue) " : " do(v_.ifFalse)
-            case "concat":
-                return do(v_.left) (v_.op == "" ? " " : v_.op) do(v_.right)
-            case "function call", "function definition":
-                argsStr:=""
-                if (v_.args.Length) {
-                    argsStr.=do(v_.args[1])
-                    i_:=2, len:=v_.args.Length + 1
-                    while (i_<len) {
-                        argsStr.=", " do(v_.args[i_])
-                        i_++
-                    }
-                }
-                return do(v_.func) "(" argsStr ")"
-            case "object":
-                argsStr:=""
-                if (v_.keys.Length) {
-                    argsStr.=do(v_.keys[1]) ":" do(v_.values[1])
-                    i_:=2, len:=v_.keys.Length + 1
-                    while (i_<len) {
-                        argsStr.=", " do(v_.keys[i_]) ":" do(v_.values[i_])
-                        i_++
-                    }
-                }
-                return "{" argsStr "}"
-        }
-    }
 }
 
 walker_superGlobalVars()
@@ -1270,6 +1311,22 @@ walker_globalVars() {
                         v_:=statements[++k_]
                         withNewline()
                     }
+                case "while with block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+                    v_:=statements[++k_]
+                    withNewline()
+                case "while without block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
                 case "else with block":
                     finalStr.="else "
                     v_:=statements[++k_]
@@ -1298,60 +1355,60 @@ walker_globalVars() {
                     finalStr.=v_.labelName ":`n"
             }
         }
+        do(t_) {
+            if (Type(t_)=="String") {
+                MsgBox "This Should Never Happen: " t_
+                return t_
+            }
+            switch t_.type {
+                case "variable":
+                    if (!superGlobalVarsMap.Has(t_.value)) {
+                        globalVarsMap[t_.value]:=t_.value
+                    }
+                case "first var scope":
+                    return do(t_.value)
+                case "property access":
+                    return do(t_.parent) "." t_.propName
+                case "group":
+                    return "(" do(t_.value) ")"
+                case "pre-unary":
+                    return t_.op do(t_.right)
+                case "post-unary assignment":
+                    return do(t_.left) t_.op
+                case "binary":
+                    return do(t_.left) " " t_.op " " do(t_.right)
+                case "comma multi-statement":
+                    return do(t_.left) ", " do(t_.right)
+                case "ternary":
+                    return do(t_.condition) " ? " do(t_.ifTrue) " : " do(t_.ifFalse)
+                case "concat":
+                    return do(t_.left) (t_.op == "" ? " " : t_.op) do(t_.right)
+                case "function call":
+                    argsStr:=""
+                    if (t_.args.Length) {
+                        argsStr.=do(t_.args[1])
+                        i_:=2, len:=t_.args.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.args[i_])
+                            i_++
+                        }
+                    }
+                    return do(t_.func) "(" argsStr ")"
+                case "object":
+                    argsStr:=""
+                    if (t_.keys.Length) {
+                        argsStr.=do(t_.keys[1]) ":" do(t_.values[1])
+                        i_:=2, len:=t_.keys.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.keys[i_]) ":" do(t_.values[i_])
+                            i_++
+                        }
+                    }
+                    return "{" argsStr "}"
+            }
+        }
     }
 
-    do(v_) {
-        if (Type(v_)=="String") {
-            MsgBox "This Should Never Happen: " v_
-            return v_
-        }
-        switch v_.type {
-            case "variable":
-                if (!superGlobalVarsMap.Has(v_.value)) {
-                    globalVarsMap[v_.value]:=v_.value
-                }
-            case "first var scope":
-                return do(v_.value)
-            case "property access":
-                return do(v_.parent) "." v_.propName
-            case "group":
-                return "(" do(v_.value) ")"
-            case "pre-unary":
-                return v_.op do(v_.right)
-            case "post-unary assignment":
-                return do(v_.left) v_.op
-            case "binary":
-                return do(v_.left) " " v_.op " " do(v_.right)
-            case "comma multi-statement":
-                return do(v_.left) ", " do(v_.right)
-            case "ternary":
-                return do(v_.condition) " ? " do(v_.ifTrue) " : " do(v_.ifFalse)
-            case "concat":
-                return do(v_.left) (v_.op == "" ? " " : v_.op) do(v_.right)
-            case "function call":
-                argsStr:=""
-                if (v_.args.Length) {
-                    argsStr.=do(v_.args[1])
-                    i_:=2, len:=v_.args.Length + 1
-                    while (i_<len) {
-                        argsStr.=", " do(v_.args[i_])
-                        i_++
-                    }
-                }
-                return do(v_.func) "(" argsStr ")"
-            case "object":
-                argsStr:=""
-                if (v_.keys.Length) {
-                    argsStr.=do(v_.keys[1]) ":" do(v_.values[1])
-                    i_:=2, len:=v_.keys.Length + 1
-                    while (i_<len) {
-                        argsStr.=", " do(v_.keys[i_]) ":" do(v_.values[i_])
-                        i_++
-                    }
-                }
-                return "{" argsStr "}"
-        }
-    }
 }
 
 walker_globalVars()
@@ -1455,6 +1512,22 @@ walker_replacer() {
                         v_:=statements[++k_]
                         withNewline()
                     }
+                case "while with block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+                    v_:=statements[++k_]
+                    withNewline()
+                case "while without block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
                 case "else with block":
                     finalStr.="else "
                     v_:=statements[++k_]
@@ -1753,6 +1826,22 @@ walker_undefinedVars() {
                         v_:=statements[++k_]
                         withNewline()
                     }
+                case "while with block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+                    v_:=statements[++k_]
+                    withNewline()
+                case "while without block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
                 case "else with block":
                     finalStr.="else "
                     v_:=statements[++k_]
@@ -1783,70 +1872,70 @@ walker_undefinedVars() {
         }
 
         do(obj, key) {
-            v_:=obj[key]
-            if (Type(v_)=="String") {
-                MsgBox "This Should Never Happen: " v_
-                return v_
+            t_:=obj[key]
+            if (Type(t_)=="String") {
+                MsgBox "This Should Never Happen: " t_
+                return t_
             }
-            switch v_.type {
+            switch t_.type {
                 case "variable":
                     switch (enumNothingLocalGlobal) {
                         case 0:
                             outer:
                             loop 1 {
                                 for _scope in functionScopes {
-                                    if (_scope.Has(v_.value)) {
+                                    if (_scope.Has(t_.value)) {
                                         break outer
                                     }
                                 }
-                                undefinedVarsMap[v_.value]:=v_.value
+                                undefinedVarsMap[t_.value]:=t_.value
                                 break outer
                             }
                         case 2:
-                            currentScope[v_.value]:=v_.value
+                            currentScope[t_.value]:=t_.value
                     }
-                    ; currentScope[v_.value]:=v_.value
+                    ; currentScope[t_.value]:=t_.value
                 case "first var scope":
-                    return do(v_, "value")
+                    return do(t_, "value")
                 case "property access":
-                    return do(v_, "parent") "." v_.propName
+                    return do(t_, "parent") "." t_.propName
                 case "group":
-                    return "(" do(v_, "value") ")"
+                    return "(" do(t_, "value") ")"
                 case "pre-unary":
-                    return v_.op do(v_, "right")
+                    return t_.op do(t_, "right")
                 case "post-unary assignment":
-                    return do(v_, "left") v_.op
+                    return do(t_, "left") t_.op
                 case "binary":
-                    if (v_.op==":=") {
-                        if (v_.left.type=="variable") {
-                            currentScope[v_.left.value]:=v_.left.value
+                    if (t_.op==":=") {
+                        if (t_.left.type=="variable") {
+                            currentScope[t_.left.value]:=t_.left.value
                         }
                     }
-                    return do(v_, "left") " " v_.op " " do(v_, "right")
+                    return do(t_, "left") " " t_.op " " do(t_, "right")
                 case "comma multi-statement":
-                    return do(v_, "left") ", " do(v_, "right")
+                    return do(t_, "left") ", " do(t_, "right")
                 case "ternary":
-                    return do(v_, "condition") " ? " do(v_, "ifTrue") " : " do(v_, "ifFalse")
+                    return do(t_, "condition") " ? " do(t_, "ifTrue") " : " do(t_, "ifFalse")
                 case "concat":
-                    return do(v_, "left") (v_.op == "" ? " " : v_.op) do(v_, "right")
+                    return do(t_, "left") (t_.op == "" ? " " : t_.op) do(t_, "right")
                 case "function call":
                     argsStr:=""
-                    if (v_.args.Length) {
-                        argsStr.=do(v_.args, 1)
-                        i_:=2, len:=v_.args.Length + 1
+                    if (t_.args.Length) {
+                        argsStr.=do(t_.args, 1)
+                        i_:=2, len:=t_.args.Length + 1
                         while (i_<len) {
-                            argsStr.=", " do(v_.args, i_)
+                            argsStr.=", " do(t_.args, i_)
                             i_++
                         }
                     }
-                    return do(v_, "func") "(" argsStr ")"
+                    return do(t_, "func") "(" argsStr ")"
                 case "object":
                     argsStr:=""
-                    if (v_.keys.Length) {
-                        argsStr.=do(v_.keys, 1) ":" do(v_.values, 1)
-                        i_:=2, len:=v_.keys.Length + 1
+                    if (t_.keys.Length) {
+                        argsStr.=do(t_.keys, 1) ":" do(t_.values, 1)
+                        i_:=2, len:=t_.keys.Length + 1
                         while (i_<len) {
-                            argsStr.=", " do(v_.keys, i_) ":" do(v_.values, i_)
+                            argsStr.=", " do(t_.keys, i_) ":" do(t_.values, i_)
                             i_++
                         }
                     }
@@ -1943,6 +2032,22 @@ what() {
                         v_:=statements[++k_]
                         withNewline()
                     }
+                case "while with block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+                    v_:=statements[++k_]
+                    withNewline()
+                case "while without block":
+                    finalStr.="while "
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
                 case "else with block":
                     finalStr.="else "
                     v_:=statements[++k_]
@@ -1971,60 +2076,60 @@ what() {
                     finalStr.=v_.labelName ":`n"
             }
         }
-        do(v_) {
-            if (Type(v_)=="String") {
-                MsgBox "This Should Never Happen: " v_
-                return v_
+        do(t_) {
+            if (Type(t_)=="String") {
+                MsgBox "This Should Never Happen: " t_
+                return t_
             }
-            switch v_.type {
+            switch t_.type {
                 case "command empty arg":
                     return ""
                 case "variable", "directive arg", "number", "hex number":
-                    return v_.value
+                    return t_.value
                 case "string":
-                    return "`"" v_.value "`""
+                    return "`"" t_.value "`""
                 case "first var scope":
-                    return do(v_.value)
+                    return do(t_.value)
                 case "property access":
-                    return do(v_.parent) "." v_.propName
+                    return do(t_.parent) "." t_.propName
                 case "group":
-                    return "(" do(v_.value) ")"
+                    return "(" do(t_.value) ")"
                 case "pre-unary":
-                    return v_.op do(v_.right)
+                    return t_.op do(t_.right)
                 case "post-unary assignment":
-                    return do(v_.left) v_.op
+                    return do(t_.left) t_.op
                 case "binary":
-                    return do(v_.left) " " v_.op " " do(v_.right)
+                    return do(t_.left) " " t_.op " " do(t_.right)
                 case "comma multi-statement":
-                    return do(v_.left) ", " do(v_.right)
+                    return do(t_.left) ", " do(t_.right)
                 case "ternary":
-                    return do(v_.condition) " ? " do(v_.ifTrue) " : " do(v_.ifFalse)
+                    return do(t_.condition) " ? " do(t_.ifTrue) " : " do(t_.ifFalse)
                 case "concat":
-                    return do(v_.left) (v_.op == "" ? " " : v_.op) do(v_.right)
+                    return do(t_.left) (t_.op == "" ? " " : t_.op) do(t_.right)
                 case "function call", "function definition":
                     argsStr:=""
-                    if (v_.args.Length) {
-                        argsStr.=do(v_.args[1])
-                        i_:=2, len:=v_.args.Length + 1
+                    if (t_.args.Length) {
+                        argsStr.=do(t_.args[1])
+                        i_:=2, len:=t_.args.Length + 1
                         while (i_<len) {
-                            argsStr.=", " do(v_.args[i_])
+                            argsStr.=", " do(t_.args[i_])
                             i_++
                         }
                     }
-                    return do(v_.func) "(" argsStr ")"
+                    return do(t_.func) "(" argsStr ")"
                 case "object":
                     argsStr:=""
-                    if (v_.keys.Length) {
-                        argsStr.=do(v_.keys[1]) ":" do(v_.values[1])
-                        i_:=2, len:=v_.keys.Length + 1
+                    if (t_.keys.Length) {
+                        argsStr.=do(t_.keys[1]) ":" do(t_.values[1])
+                        i_:=2, len:=t_.keys.Length + 1
                         while (i_<len) {
-                            argsStr.=", " do(v_.keys[i_]) ":" do(v_.values[i_])
+                            argsStr.=", " do(t_.keys[i_]) ":" do(t_.values[i_])
                             i_++
                         }
                     }
                     return "{" argsStr "}"
             }
-            MsgBox "Switch .type not matched {ejf90u2349r8u3} : " v_.type
+            MsgBox "Switch .type not matched {ejf90u2349r8u3} : " t_.type
         }
     }
 
