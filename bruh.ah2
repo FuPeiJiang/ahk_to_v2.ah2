@@ -1016,10 +1016,11 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
 ; AHK_parse(FileRead("string continuation section.ahk"))
-AHK_parse(FileRead("RunCMD.ahk"))
+; AHK_parse(FileRead("RunCMD.ahk"))
 ; AHK_parse(FileRead("File.ReadLine.ahk"))
 ; AHK_parse(FileRead("Clipboard A_Clipboard.ahk"))
 ; AHK_parse(FileRead("while.ahk"))
+AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
