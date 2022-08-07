@@ -10,6 +10,8 @@ currentArr:=[]
 AHK_parse(str) {
     global currentArr
 
+    str:=StrReplace(str, "`r`n", "`n", true)
+    str:=StrReplace(str, "`r", "`n", true)
     strBak:=str
 
     c_:=1
@@ -1025,8 +1027,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("Clipboard A_Clipboard.ahk"))
 ; AHK_parse(FileRead("while.ahk"))
 ; AHK_parse("buildNumber:=splitByDot[3]")
-AHK_parse("buildNumber:=splitByDot[ComObjCreate()+1]")
-; AHK_parse(A_Clipboard)
+; AHK_parse("buildNumber:=splitByDot[ComObjCreate()+1]")
+AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
