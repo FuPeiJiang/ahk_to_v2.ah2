@@ -210,7 +210,7 @@ AHK_parse(str) {
                                 }
                             }
                         }
-                    case "(", "[", '.':
+                    case "(", "[", ".":
                         ; function call, array access, property
                         c_:=c1
                         skip_expression()
@@ -815,7 +815,7 @@ AHK_parse(str) {
         loop {
             char_:=SubStr(str, c_, 1)
             switch char_ {
-                case '(':
+                case "(":
                     ; function call
                     c_++
                     skip_comments()
@@ -839,9 +839,13 @@ AHK_parse(str) {
                         }
                         args.Push(value_expression())
                     }
-                case '[':
-                    ; array access
-                case '.':
+                case "[":
+                    ; array access or map access (same syntactically..)
+                    c_++
+                    skip_comments()
+                    left:={type: "array access", parent: left, key: value_expression()}
+                    c_++
+                case ".":
                     ; property access
                     c_++
                     RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
@@ -1012,7 +1016,7 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("!get colour_mid.ahk"))
 ; AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
 ; AHK_parse(FileRead("ifelse.ahk"))
-AHK_parse(FileRead("RunAsTask.ahk"))
+; AHK_parse(FileRead("RunAsTask.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
 ; AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
 ; AHK_parse(FileRead("string continuation section.ahk"))
@@ -1020,6 +1024,8 @@ AHK_parse(FileRead("RunAsTask.ahk"))
 ; AHK_parse(FileRead("File.ReadLine.ahk"))
 ; AHK_parse(FileRead("Clipboard A_Clipboard.ahk"))
 ; AHK_parse(FileRead("while.ahk"))
+; AHK_parse("buildNumber:=splitByDot[3]")
+AHK_parse("buildNumber:=splitByDot[ComObjCreate()+1]")
 ; AHK_parse(A_Clipboard)
 
 
@@ -1092,7 +1098,7 @@ walker_superGlobalVars() {
                     finalStr.="`n"
                 case "hotkey":
                     finalStr.=v_.keyName
-                case "property access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
+                case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
                 , "comma multi-statement":
                     finalStr.=do(v_) "`n"
                 case "var scope declaration":
@@ -1195,6 +1201,9 @@ walker_superGlobalVars() {
                     return do(t_.value)
                 case "property access":
                     return do(t_.parent) "." t_.propName
+                case "array access":
+                    ;the order of this may cause problems
+                    return do(t_.parent) "[" do(t_.key) "]"
                 case "group":
                     return "(" do(t_.value) ")"
                 case "pre-unary":
@@ -1284,7 +1293,7 @@ walker_globalVars() {
                     finalStr.="`n"
                 case "hotkey":
                     finalStr.=v_.keyName
-                case "property access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
+                case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
                 , "comma multi-statement":
                     finalStr.=do(v_) "`n"
                 case "var scope declaration":
@@ -1391,6 +1400,9 @@ walker_globalVars() {
                     return do(t_.value)
                 case "property access":
                     return do(t_.parent) "." t_.propName
+                case "array access":
+                    ;the order of this may cause problems
+                    return do(t_.parent) "[" do(t_.key) "]"
                 case "group":
                     return "(" do(t_.value) ")"
                 case "pre-unary":
@@ -1479,7 +1491,7 @@ walker_replacer() {
                     finalStr.="`n"
                 case "hotkey":
                     finalStr.=v_.keyName
-                case "property access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
+                case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
                 , "comma multi-statement", "concat":
                     finalStr.=do(statements, k_) "`n"
                 case "var scope declaration":
@@ -1623,6 +1635,9 @@ walker_replacer() {
                     return do(t_, "value")
                 case "property access":
                     return do(t_, "parent") "." t_.propName
+                case "array access":
+                    ;the order of this may cause problems
+                    return do(t_, "parent") "[" do(t_, "key") "]"
                 case "group":
                     return "(" do(t_, "value") ")"
                 case "pre-unary":
@@ -1895,7 +1910,7 @@ walker_undefinedVars() {
                     finalStr.="`n"
                 case "hotkey":
                     finalStr.=v_.keyName
-                case "property access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
+                case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
                 , "comma multi-statement":
                     finalStr.=do(statements, k_) "`n"
                 case "var scope declaration":
@@ -2025,6 +2040,9 @@ walker_undefinedVars() {
                     return do(t_, "value")
                 case "property access":
                     return do(t_, "parent") "." t_.propName
+                case "array access":
+                    ;the order of this may cause problems
+                    return do(t_, "parent") "[" do(t_, "key") "]"
                 case "group":
                     return "(" do(t_, "value") ")"
                 case "pre-unary":
@@ -2118,7 +2136,7 @@ what() {
                     finalStr.="`n"
                 case "hotkey":
                     finalStr.=v_.keyName
-                case "property access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
+                case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
                 , "comma multi-statement", "concat":
                     finalStr.=do(v_) "`n"
                 case "var scope declaration":
@@ -2226,6 +2244,9 @@ what() {
                     return do(t_.value)
                 case "property access":
                     return do(t_.parent) "." t_.propName
+                case "array access":
+                    ;the order of this may cause problems
+                    return do(t_.parent) "[" do(t_.key) "]"
                 case "group":
                     return "(" do(t_.value) ")"
                 case "pre-unary", "v2 pre-unary":
