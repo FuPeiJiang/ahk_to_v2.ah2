@@ -119,6 +119,46 @@ AHK_parse(str) {
                 RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_varName, c_)
                 c_+=OutputVar_varName.Len
                 char_:=SubStr(str, c_, 1)
+                ifStatemement() {
+                    ; if statement
+                    skip_comments()
+                    toPush:=value_expression()
+                    if (toPush.type == "variable") {
+                        toPush:={type: "group", value: toPush}
+                    }
+                    char_:=SubStr(str, c_, 1)
+                    if (char_=="{") {
+                        currentArr.Push({type:"if with block"})
+                        currentArr.Push({type: "condition with block",expr:toPush})
+                    } else {
+                        currentArr.Push({type:"if without block"})
+                        currentArr.Push(toPush)
+                    }
+                }
+                elseStatemement() {
+                    if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "if with block") {
+                        currentArr[currentArr.Length].type:="block before else"
+                    }
+                    skip_comments()
+                    char_:=SubStr(str, c_, 1)
+                    if (char_=="{") {
+                        currentArr.Push({type:"else with block"})
+                    } else {
+                        currentArr.Push({type:"else without block"})
+                    }
+                }
+                _catchStatemement() {
+                    if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "try with block") {
+                        currentArr[currentArr.Length].type:="block before catch"
+                    }
+                    skip_comments()
+                    char_:=SubStr(str, c_, 1)
+                    if (char_=="{") {
+                        currentArr.Push({type:"catch with block"})
+                    } else {
+                        currentArr.Push({type:"catch without block"})
+                    }
+                }
                 switch char_ {
                     case "":
                         add_empty_command()
@@ -131,20 +171,7 @@ AHK_parse(str) {
                             ; directive
                             skip_directiveArgs()
                         } else if (OutputVar_varName.0="if") {
-                            ; if statement
-                            skip_comments()
-                            toPush:=value_expression()
-                            if (toPush.type == "variable") {
-                                toPush:={type: "group", value: toPush}
-                            }
-                            char_:=SubStr(str, c_, 1)
-                            if (char_=="{") {
-                                currentArr.Push({type:"if with block"})
-                                currentArr.Push({type: "condition with block",expr:toPush})
-                            } else {
-                                currentArr.Push({type:"if without block"})
-                                currentArr.Push(toPush)
-                            }
+                            ifStatemement()
                         } else {
                             skip_comments()
                             if (RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)) {
@@ -181,27 +208,9 @@ AHK_parse(str) {
                                         skip_commandArgs()
                                     } else {
                                         if (OutputVar_varName.0="else") {
-                                            if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "if with block") {
-                                                currentArr[currentArr.Length].type:="block before else"
-                                            }
-                                            skip_comments()
-                                            char_:=SubStr(str, c_, 1)
-                                            if (char_=="{") {
-                                                currentArr.Push({type:"else with block"})
-                                            } else {
-                                                currentArr.Push({type:"else without block"})
-                                            }
+                                            elseStatemement()
                                         } else if (OutputVar_varName.0="catch") {
-                                            if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "try with block") {
-                                                currentArr[currentArr.Length].type:="block before catch"
-                                            }
-                                            skip_comments()
-                                            char_:=SubStr(str, c_, 1)
-                                            if (char_=="{") {
-                                                currentArr.Push({type:"catch with block"})
-                                            } else {
-                                                currentArr.Push({type:"catch without block"})
-                                            }
+                                            _catchStatemement()
                                         } else {
                                             add_empty_command()
                                         }
@@ -212,10 +221,26 @@ AHK_parse(str) {
                                 }
                             }
                         }
-                    case "(", "[", ".":
-                        ; function call, array access, property
+                    case "(":
+                        ; function call
+                        if (OutputVar_varName.0="if") {
+                            ifStatemement()
+                        } else {
+                            c_:=c1
+                            skip_expression()
+                        }
+                    case "[", ".":
+                        ; array access, property
                         c_:=c1
                         skip_expression()
+                    case "{":
+                        if (OutputVar_varName.0="else") {
+                            elseStatemement()
+                        } else if (OutputVar_varName.0="catch") {
+                            _catchStatemement()
+                        } else {
+                            MsgBox "`"{`" but not `"else`" nor `"catch`": " OutputVar_varName.0
+                        }
                     default:
                         RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
                         if (OutputVar_operator.0==":") {
@@ -1028,7 +1053,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("while.ahk"))
 ; AHK_parse("buildNumber:=splitByDot[3]")
 ; AHK_parse("buildNumber:=splitByDot[ComObjCreate()+1]")
-AHK_parse(A_Clipboard)
+AHK_parse("if(true){}else{}")
+; AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
