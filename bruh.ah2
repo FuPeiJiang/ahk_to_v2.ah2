@@ -466,11 +466,11 @@ AHK_parse(str) {
                     }
                     argsArr.Push(toPush ? toPush : {type:"command empty arg"})
                     break bruh
-                case "Sleep":
+                case "Sleep", "break":
                     boolArr:=[0]
                 case "Send","SendRaw","SendInput","SendPlay","SendEvent"
                 ,"SendMode", "SetWorkingDir", "SetBatchLines", "ListLines"
-                ,"Goto":
+                ,"Goto","Critical", "DetectHiddenWindows","SetTitleMatchMode":
                     boolArr:=[3]
                 case "CoordMode":
                     boolArr:=[2,3]
@@ -615,6 +615,41 @@ AHK_parse(str) {
                     return
                 case "WinActivate":
                     boolArr:=[2,2,2,3]
+                case "WinGetTitle", "WinGetClass":
+                    boolArr:=[0,2,2,2,3]
+                case "WinGet":
+                    boolArr:=[0,2,2,2,2,3]
+                case "WinGetPos":
+                    boolArr:=[1,1,1,1,2,2,2,3]
+                case "WinWaitActive", "WinWaitNotActive":
+                    boolArr:=[2,2,0,2,3]
+                case "for":
+                    var1:=value_expression()
+                    char_:=SubStr(str, c_, 1)
+                    switch char_ {
+                        case ",":
+                            c_++
+                            skip_comments()
+                            var2:=value_expression()
+                            char2:=SubStr(str, c_, 1)
+                            if (char2=="{") {
+                                expression:=var2.right.right
+                                currentArr.Push({type:"for with block", var1:var1, var2:var2.left, expression:expression})
+                                return
+                            } else {
+                                expression:=var2.right.right
+                                currentArr.Push({type:"for without block", var1:var1, var2:var2.left, expression:expression})
+                                return
+                            }
+                        case "{":
+                            expression:=var1.right.right
+                            currentArr.Push({type:"for with block", var1:var1.left, var2:false, expression:expression})
+                            return
+                        default:
+                            expression:=var1.right.right
+                            currentArr.Push({type:"for without block", var1:var1.left, var2:false, expression:expression})
+                            return
+                    }
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -671,7 +706,7 @@ AHK_parse(str) {
                         case 0:
                             toPush:=value_expression()
                         case 1:
-                            toPush:="&" value_expression()
+                            toPush:={type:"v2 pre-unary", op:"&", right:value_expression()}
                         case 2:
                             skip_v1str_commaDelim()
                             toPush:=v1str_to_expression(OutputVar_v1str.0)
@@ -772,6 +807,53 @@ AHK_parse(str) {
                     }
                 }
                 add_command(OutputVar_varName.0, argsArr)
+            case "WinGetTitle":
+                currentArr.Push({type: "binary", op: ":=", left:argsArr.RemoveAt(1), right: {type: "function call", func: {type:"variable"
+                , value:"WinGetTitle"}, args: argsArr}})
+            case "WinGetClass":
+                currentArr.Push({type: "binary", op: ":=", left:argsArr.RemoveAt(1), right: {type: "function call", func: {type:"variable"
+                , value:"WinGetClass"}, args: argsArr}})
+            case "WinGet":
+                if (argsArr.Length == 1) {
+                    winGetCommand:="WinGetID"
+                } else if (argsArr[2].type == "command empty arg") {
+                    argsArr.RemoveAt(2)
+                    winGetCommand:="WinGetID"
+                } else {
+                    switch (argsArr.RemoveAt(2).value), 0 {
+                        case "ID":
+                            postFix:="ID"
+                        case "IDLast":
+                            postFix:="IDLast"
+                        case "PID":
+                            postFix:="PID"
+                        case "ProcessName":
+                            postFix:="ProcessName"
+                        case "ProcessPath":
+                            postFix:="ProcessPath"
+                        case "Count":
+                            postFix:="Count"
+                        case "List":
+                            postFix:="List"
+                        case "MinMax":
+                            postFix:="MinMax"
+                        case "ControlList":
+                            postFix:="ControlList"
+                        case "ControlListHwnd":
+                            postFix:="ControlListHwnd"
+                        case "Transparent":
+                            postFix:="Transparent"
+                        case "TransColor":
+                            postFix:="TransColor"
+                        case "Style":
+                            postFix:="Style"
+                        case "ExStyle":
+                            postFix:="ExStyle"
+                    }
+                    winGetCommand:="WinGet" postFix
+                }
+                currentArr.Push({type: "binary", op: ":=", left:argsArr.RemoveAt(1), right: {type: "function call", func: {type:"variable"
+                , value:winGetCommand}, args: argsArr}})
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -857,20 +939,20 @@ AHK_parse(str) {
                     values:=[]
                     loop {
                         char_:=SubStr(str, c_, 1)
-                            switch char_ {
-                                case "}":
-                                    left:={type: "object", keys: keys, values: values}
-                                    c_++
-                                    break
-                                case ":":
-                                    c_++
-                                    skip_comments()
-                                    values.Push(value_expression())
-                                    continue
-                                case ",":
-                                    c_++
-                                    skip_comments()
-                            }
+                        switch char_ {
+                            case "}":
+                                left:={type: "object", keys: keys, values: values}
+                                c_++
+                                break
+                            case ":":
+                                c_++
+                                skip_comments()
+                                values.Push(value_expression())
+                                continue
+                            case ",":
+                                c_++
+                                skip_comments()
+                        }
                         toPush:=value_expression()
                         if (toPush.type == "variable") {
                             toPush.type:="obj key"
@@ -881,7 +963,23 @@ AHK_parse(str) {
                     break
                 case "[":
                     ; array literal
-                    ; left:=OutputVar_variableName
+                    c_++
+                    skip_comments()
+                    elements:=[]
+                    loop {
+                        char_:=SubStr(str, c_, 1)
+                        switch char_ {
+                            case "]":
+                                left:={type: "array", elements: elements}
+                                c_++
+                                break
+                            case ",":
+                                c_++
+                                skip_comments()
+                        }
+                        elements.Push(value_expression())
+                    }
+                    break
                 case "`"":
                     if (string_continuation_section_options==false) {
                         RegExMatch(str, "((?:[ \t]+(?=;)(*ACCEPT)|`"`"|[^`"\n]|\n(*ACCEPT))*)(`")", &OutputVar_stringLiteral, c_ + 1)
@@ -953,7 +1051,8 @@ AHK_parse(str) {
                         break
                     }
                 }
-            RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
+            ; RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
+            RegExMatch(str, "[%a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
             ; left:=OutputVar_variableName.0
             if (OutputVar_variableName.0 ~= "(?i)^0x[0-9A-F]*$") {
                 left:={type: "hex number", value: OutputVar_variableName.0}
@@ -961,7 +1060,7 @@ AHK_parse(str) {
                 if (OutputVar_variableName.0 ~= "^[0-9]*$") {
                     RegExMatch(str, "(?![.+]$)\+?\d*(?:\.\d*)?", &OutputVar_variableNameWhat, c_)
                     if (OutputVar_variableNameWhat.Len == 0) {
-                        MsgBox "what is this? parsing number here"
+                        MsgBox "what is this? parsing number here, c_:" c_
                     }
                     left:={type: "number", value: OutputVar_variableNameWhat.0}
                     OutputVar_variableName:=OutputVar_variableNameWhat
@@ -1354,7 +1453,7 @@ walker_superGlobalVars() {
         }
         do(t_) {
             if (Type(t_)=="String") {
-                MsgBox "This Should Never Happen: " t_
+                MsgBox "This Should Never Happen1: " t_
                 return t_
             }
             switch t_.type {
@@ -1401,6 +1500,17 @@ walker_superGlobalVars() {
                         }
                     }
                     return "{" argsStr "}"
+                case "array":
+                    argsStr:=""
+                    if (t_.elements.Length) {
+                        argsStr.=do(t_.elements[1])
+                        i_:=2, len:=t_.elements.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.elements[i_])
+                            i_++
+                        }
+                    }
+                    return "[" argsStr "]"
             }
         }
     }
@@ -1551,7 +1661,7 @@ walker_globalVars() {
         }
         do(t_) {
             if (Type(t_)=="String") {
-                MsgBox "This Should Never Happen: " t_
+                MsgBox "This Should Never Happen2: " t_
                 return t_
             }
             switch t_.type {
@@ -1602,6 +1712,17 @@ walker_globalVars() {
                         }
                     }
                     return "{" argsStr "}"
+                case "array":
+                    argsStr:=""
+                    if (t_.elements.Length) {
+                        argsStr.=do(t_.elements[1])
+                        i_:=2, len:=t_.elements.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.elements[i_])
+                            i_++
+                        }
+                    }
+                    return "[" argsStr "]"
             }
         }
     }
@@ -1756,7 +1877,7 @@ walker_replacer() {
         do(obj, key) {
             t_:=Type(obj) == "Object" ? obj.%key% : obj[key]
             if (Type(t_)=="String") {
-                MsgBox "This Should Never Happen: " t_
+                MsgBox "This Should Never Happen3: " t_
                 return t_
             }
             switch t_.type {
@@ -1902,6 +2023,8 @@ walker_replacer() {
                                     t_.args:=replacementArr
                                 case "NumGet":
                                     switch t_.args.length {
+                                        case 1:
+                                            replacementArr:=[t_.args[1], {type:"number", value:0}, {type:"string", value:"Ptr"}]
                                         case 2:
                                             replacementArr:=[t_.args[1], t_.args[2], {type:"string", value:"Ptr"}]
                                         case 3:
@@ -1973,6 +2096,17 @@ walker_replacer() {
                         }
                     }
                     return "{" argsStr "}"
+                case "array":
+                    argsStr:=""
+                    if (t_.elements.Length) {
+                        argsStr.=do(t_.elements, 1)
+                        i_:=2, len:=t_.elements.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.elements, i_)
+                            i_++
+                        }
+                    }
+                    return "[" argsStr "]"
             }
             MsgBox "Switch .type not matched {okerihji325928} : " t_.type
         }
@@ -2178,7 +2312,7 @@ walker_undefinedVars() {
         do(obj, key) {
             t_:=Type(obj) == "Object" ? obj.%key% : obj[key]
             if (Type(t_)=="String") {
-                MsgBox "This Should Never Happen: " t_
+                MsgBox "This Should Never Happen4: " t_
                 return t_
             }
             switch t_.type {
@@ -2255,6 +2389,17 @@ walker_undefinedVars() {
                         }
                     }
                     return "{" argsStr "}"
+                case "array":
+                    argsStr:=""
+                    if (t_.elements.Length) {
+                        argsStr.=do(t_.elements, 1)
+                        i_:=2, len:=t_.elements.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.elements, i_)
+                            i_++
+                        }
+                    }
+                    return "[" argsStr "]"
             }
         }
     }
@@ -2415,13 +2560,37 @@ what() {
                     v_:=statements[++k_]
                     withNewline()
                     indent:=SubStr(indent, 3)
+                case "for with block":
+                    finalStr.="for " do(v_.var1)
+                    if (v_.var2) {
+                        finalStr.=", " do(v_.var2)
+                    }
+                    finalStr.=" in " do(v_.expression)
+
+                    finalStr.=" " ;for the block
+                    v_:=statements[++k_]
+                    withNewline()
+                case "for without block":
+                    finalStr.="for " do(v_.var1)
+                    if (v_.var2) {
+                        finalStr.=", " do(v_.var2)
+                    }
+                    finalStr.=" in " do(v_.expression)
+
+                    finalStr.="`n"
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
                 case "label":
                     finalStr.=v_.labelName ":`n"
             }
+
         }
         do(t_) {
             if (Type(t_)=="String") {
-                MsgBox "This Should Never Happen: " t_
+                MsgBox "This Should Never Happen5: " t_
                 return t_
             }
             switch t_.type {
@@ -2478,6 +2647,17 @@ what() {
                         }
                     }
                     return "{" argsStr "}"
+                case "array":
+                    argsStr:=""
+                    if (t_.elements.Length) {
+                        argsStr.=do(t_.elements[1])
+                        i_:=2, len:=t_.elements.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.elements[i_])
+                            i_++
+                        }
+                    }
+                    return "[" argsStr "]"
             }
             MsgBox "Switch .type not matched {ejf90u2349r8u3} : " t_.type
         }
