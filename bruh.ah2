@@ -159,11 +159,63 @@ AHK_parse(str) {
                         currentArr.Push({type:"catch without block"})
                     }
                 }
+                commandStatement() {
+                    if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
+                        c_:=c1
+                        skip_expression()
+                    } else if (InStr(",++,--,", "," OutputVar_operator.0 ",", true)) {
+                        if (InStr(OutputVar_comments.0, "`n", true)) {
+                            ; MsgBox
+                            ; ++2
+                            add_command(OutputVar_varName.0, [])
+                            return true ; continue statements_loop
+                        } else {
+                            ; MsgBox ++2
+                            skip_commandArgs()
+                        }
+                    } else if (OutputVar_operator.0=="=") {
+                        c_++
+                        skip_comments()
+                        skip_v1str_noNeedToEscapeComma()
+                        currentArr.Push({type: "binary", op: ":=", left:OutputVar_varName.0, right: v1str_to_expression(OutputVar_v1str.0)})
+
+                    } else {
+                        ; if it's unary plus, or *2, it's passed to MsgBox as v1str
+                        skip_commandArgs()
+                    }
+
+                }
                 switch char_ {
                     case "":
                         add_empty_command()
                         return
-                    case " ", "`t", "`n", ",":
+                    case ",":
+                        if (char1=="#") {
+                            ; directive
+                            skip_directiveArgs()
+                        } else {
+                            skip_comments()
+                            if (RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)) {
+                                if (commandStatement()) {
+                                    continue statements_loop
+                                }
+                            } else {
+                                ; command
+                                ; if skipped a line, it's another statement now
+                                ; if didn't skip a line, it's args...
+                                if (InStr(OutputVar_comments.0, "`n", true)) {
+                                    if (RegExMatch(str, "(*COMMIT)(?i)(?:or|and)", &OutputVar_operator, c_)) {
+                                        skip_commandArgs()
+                                    } else {
+                                        add_empty_command()
+                                        continue statements_loop
+                                    }
+                                } else {
+                                    skip_commandArgs()
+                                }
+                            }
+                        }
+                    case "`n":
                         ;directive ONLY if starts with # of if
                         ; else, assignment or command only if no :=
                         ; msgbox := 2 is an assignment
@@ -175,30 +227,54 @@ AHK_parse(str) {
                         } else {
                             skip_comments()
                             if (RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)) {
-                                if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
-                                    c_:=c1
-                                    skip_expression()
-                                } else if (InStr(",++,--,", "," OutputVar_operator.0 ",", true)) {
-                                    if (InStr(OutputVar_comments.0, "`n", true)) {
-                                        ; MsgBox
-                                        ; ++2
-                                        add_command(OutputVar_varName.0, [])
-                                        continue statements_loop
-                                    } else {
-                                        ; MsgBox ++2
+                                if (commandStatement()) {
+                                    continue statements_loop
+                                }
+                            } else {
+                                ; command
+                                ; if skipped a line, it's another statement now
+                                ; if didn't skip a line, it's args...
+                                if (InStr(OutputVar_comments.0, "`n", true)) {
+                                    if (RegExMatch(str, "(*COMMIT)(?i)(?:or|and)", &OutputVar_operator, c_)) {
                                         skip_commandArgs()
+                                    } else {
+                                        if (OutputVar_varName.0="else") {
+                                            elseStatemement()
+                                        } else if (OutputVar_varName.0="catch") {
+                                            _catchStatemement()
+                                        } else {
+                                            add_empty_command()
+                                        }
+                                        continue statements_loop
                                     }
-                                } else if (OutputVar_operator.0=="=") {
-                                    c_++
-                                    skip_comments()
-                                    skip_v1str_noNeedToEscapeComma()
-                                    currentArr.Push({type: "binary", op: ":=", left:OutputVar_varName.0, right: v1str_to_expression(OutputVar_v1str.0)})
-
                                 } else {
-                                    ; if it's unary plus, or *2, it's passed to MsgBox as v1str
                                     skip_commandArgs()
                                 }
-
+                            }
+                        }
+                    case " ", "`t":
+                        if (char1=="#") {
+                            ; directive
+                            skip_directiveArgs()
+                        } else if (OutputVar_varName.0="if") {
+                            ifStatemement()
+                        } else if (OutputVar_varName.0="class") {
+                            skip_comments()
+                            RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_className, c_)
+                            c_+=OutputVar_className.Len
+                            skip_comments()
+                            char_:=SubStr(str, c_, 1)
+                            if (char_=="{") {
+                                currentArr.Push({type: "class",className:OutputVar_className.0})
+                            } else {
+                                MsgBox "class without {"
+                            }
+                        } else {
+                            skip_comments()
+                            if (RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)) {
+                                if (commandStatement()) {
+                                    continue statements_loop
+                                }
                             } else {
                                 ; command
                                 ; if skipped a line, it's another statement now
@@ -482,6 +558,63 @@ AHK_parse(str) {
                         currentArr.Push(toPush)
                     }
                     return
+                case "loop":
+                    char_:=SubStr(str, c_, 1)
+                    switch char_ {
+                        case "%":
+                            ; expression only if followed by a \s, yes, \n works too
+                            char_:=SubStr(str, c_ + 1, 1)
+                            if (char_~="\s") {
+                                ; expression
+                                c_+=2
+                                skip_comments()
+                                toPush:=value_expression()
+                            } else {
+                                ; v1str MsgBox %var%
+                                ; if (argNum == boolArr.Length) {
+                                    ; skip_v1str_noNeedToEscapeComma_bracketDelim()
+                                    ; RegExMatch(str, "[^\s{]+(?:[ \t]+[^; \t{][^\s{]*)*", &OutputVar_v1str, c_)
+                                    ; c_+=OutputVar_v1str.Len
+                                    ; toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                    ; skip_comments()
+                                    ; break
+                                ; } else {
+                                    ; skip_v1str_commaBracketDelim()
+                                    RegExMatch(str, "[^\s{,]+(?:[ \t]+[^; \t{,][^\s{,]*)*", &OutputVar_v1str, c_)
+                                    c_+=OutputVar_v1str.Len
+                                    toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                    skip_comments()
+                                ; }
+                            }
+                        case "{":
+                            ; loop { forever
+                            currentArr.Push({type:"loop with block1"})
+                            return
+                        ; no condition
+                        default:
+                            ; skip_v1str_commaBracketDelim()
+                            RegExMatch(str, "[^\s{,]+(?:[ \t]+[^; \t{,][^\s{,]*)*", &OutputVar_v1str, c_)
+                            c_+=OutputVar_v1str.Len
+                            if (IsInteger(OutputVar_v1str.0)) {
+                                toPush:={type: "number", value: Integer(OutputVar_v1str.0)}
+                            } else {
+                                toPush:={type: "number", value: 0}
+                            }
+                            skip_comments()
+
+                    }
+                    ; toPush:=v1str_to_expression(OutputVar_v1str.0)
+                    char_:=SubStr(str, c_, 1)
+                    if (char_=="{") {
+                        currentArr.Push({type:"loop with block2"})
+                        currentArr.Push({type: "condition with block",expr:toPush})
+                    } else {
+                        currentArr.Push({type:"loop without block"})
+                        currentArr.Push({type: "condition without block", expr: toPush})
+                    }
+                    return
+                case "WinActivate":
+                    boolArr:=[2,2,2,3]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -1053,8 +1186,8 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("while.ahk"))
 ; AHK_parse("buildNumber:=splitByDot[3]")
 ; AHK_parse("buildNumber:=splitByDot[ComObjCreate()+1]")
-AHK_parse("if(true){}else{}")
-; AHK_parse(A_Clipboard)
+; AHK_parse("if(true){}else{}")
+AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
@@ -1346,7 +1479,9 @@ walker_globalVars() {
                 case "function definition":
                     finalStr.=do(v_) " "
                     v_:=statements[++k_]
-                    globalFunctionIndices.Push(k_)
+                    if (indent=="") {
+                        globalFunctionIndices.Push(k_)
+                    }
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
                 case "if with block":
@@ -2185,12 +2320,30 @@ what() {
                     indent:=SubStr(indent, 3)
                     finalStr.=indent
                     finalStr.="} "
+                    v_:=statements[++k_]
+                    withNewline()
+                case "class":
+                    finalStr.="class " v_.className " "
+                    v_:=statements[++k_]
+                    withNewline()
                 case "function definition":
                     finalStr.=do(v_) " "
                     v_:=statements[++k_]
                     withNewline()
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
+                case "condition without block":
+                    finalStr.=do(v_.expr) "`n"
+                case "loop with block1":
+                    finalStr.="loop "
+                    v_:=statements[++k_]
+                    withNewline()
+                case "loop with block2":
+                    finalStr.="loop "
+                    v_:=statements[++k_]
+                    withNewline()
+                    v_:=statements[++k_]
+                    withNewline()
                 case "if with block":
                     finalStr.="if "
                     v_:=statements[++k_]
@@ -2212,6 +2365,16 @@ what() {
                         v_:=statements[++k_]
                         withNewline()
                     }
+                case "loop without block":
+                    finalStr.="loop "
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
                 case "while with block":
                     finalStr.="while "
                     v_:=statements[++k_]
