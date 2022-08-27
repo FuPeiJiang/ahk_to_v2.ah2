@@ -41,9 +41,11 @@ AHK_parse(str) {
                 return
             case "{":
                 c_++
-                switch currentArr[currentArr.Length].type {
-                    case "function call":
-                        currentArr[currentArr.Length].type:="function definition"
+                if (currentArr.Length) {
+                    switch currentArr[currentArr.Length].type {
+                        case "function call":
+                            currentArr[currentArr.Length].type:="function definition"
+                    }
                 }
                 arrArr.Push(currentArr)
                 currentArr.Push({type:"block", statements:statements:=[]})
@@ -54,6 +56,12 @@ AHK_parse(str) {
             case "}":
                 c_++
                 currentArr:=arrArr.Pop()
+                if (arrArr.Length) {
+                    lastArr:=arrArr[arrArr.Length]
+                    if (lastArr.Length && lastArr[lastArr.Length].type == "switch") {
+                        currentArr:=arrArr.Pop()
+                    }
+                }
                 skip_comments()
                 continue statements_loop
             case "``", "\":
@@ -322,9 +330,17 @@ AHK_parse(str) {
                         if (OutputVar_operator.0==":") {
                             ;label
                             c_++
-                            currentArr.Push({type:"label", labelName:SubStr(str, c1, c_ - c1 - 1)})
-                            labelBlockStart:=currentArr.Length + 1
-                            skip_comments()
+                            labelName:=SubStr(str, c1, c_ - c1 - 1)
+                            if (labelName = "default") {
+                                switchStatements:=arrArr[arrArr.Length]
+                                switchStatements.Push({type: "default", statements:statements:=[]})
+                                currentArr:=statements
+                                skip_comments()
+                            } else {
+                                currentArr.Push({type:"label", labelName:labelName})
+                                labelBlockStart:=currentArr.Length + 1
+                                skip_comments()
+                            }
                         } else {
                             ;assignment
                             c_:=c1
@@ -649,6 +665,36 @@ AHK_parse(str) {
                             expression:=var1.right.right
                             currentArr.Push({type:"for without block", var1:var1.left, var2:false, expression:expression})
                             return
+                    }
+                case "switch":
+                    SwitchValue:=value_expression()
+                    if (SwitchValue.type !== "group") {
+                        SwitchValue:={type: "group", value: SwitchValue}
+                    }
+                    ; ASSUME it is at "{"
+                    c_++
+                    ; arrArr.Push(currentArr, "consumable for first 'case'")
+                    currentArr.Push({type:"switch", SwitchValue:SwitchValue, statements:statements:=[]})
+                    arrArr.Push(currentArr, statements)
+                    skip_comments()
+                    return
+                case "case":
+                    CaseValues:=[]
+                    loop {
+                        CaseValues.Push(value_expression())
+                        char_:=SubStr(str, c_, 1)
+                        switch char_ {
+                            case ":":
+                                switchStatements:=arrArr[arrArr.Length]
+                                switchStatements.Push({type: "case", CaseValues: CaseValues, statements:statements:=[]})
+                                currentArr:=statements
+                                c_++
+                                skip_comments()
+                                return
+                            case ",":
+                                c_++
+                                skip_comments()
+                        }
                     }
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
@@ -1286,7 +1332,8 @@ AHK_parse(str) {
 ; AHK_parse("buildNumber:=splitByDot[3]")
 ; AHK_parse("buildNumber:=splitByDot[ComObjCreate()+1]")
 ; AHK_parse("if(true){}else{}")
-AHK_parse(A_Clipboard)
+AHK_parse(FileRead("switch.ahk"))
+; AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
@@ -2585,6 +2632,48 @@ what() {
                     indent:=SubStr(indent, 3)
                 case "label":
                     finalStr.=v_.labelName ":`n"
+                case "switch":
+                    finalStr.="switch " do(v_.SwitchValue) " {`n"
+                    indent.="  "
+                    do_statements(v_.statements)
+                    indent:=SubStr(indent, 3)
+                    finalStr.=indent
+                    finalStr.="}`n"
+                case "case":
+                    CaseValues:=v_.CaseValues
+                    finalStr.="case " do(CaseValues[1])
+                    j_:=2
+                    while (j_ <= CaseValues.Length) {
+                        finalStr.=", " do(CaseValues[j_])
+                        j_++
+                    }
+                    finalStr.=":"
+
+                    do_statements_case()
+                case "default":
+                    finalStr.="default:"
+                    do_statements_case()
+            }
+            do_statements_case() {
+                statements_case:=v_.statements
+                j_:=2
+                if (statements_case.Length && statements_case[1].type=="block") {
+                    v_:=statements_case[1]
+                    withNewline()
+                } else {
+                    j_--
+                    finalStr.="`n"
+                }
+
+                indent.="  "
+                statements_case_len:=statements_case.Length + 1
+                while (j_ < statements_case_len) {
+                    v_:=statements_case[j_]
+                    finalStr.=indent
+                    withNewline()
+                    j_++
+                }
+                indent:=SubStr(indent, 3)
             }
 
         }
