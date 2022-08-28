@@ -1332,7 +1332,8 @@ AHK_parse(str) {
 ; AHK_parse("buildNumber:=splitByDot[3]")
 ; AHK_parse("buildNumber:=splitByDot[ComObjCreate()+1]")
 ; AHK_parse("if(true){}else{}")
-AHK_parse(FileRead("switch.ahk"))
+; AHK_parse(FileRead("switch.ahk"))
+AHK_parse(FileRead("switch2.ahk"))
 ; AHK_parse(A_Clipboard)
 
 
