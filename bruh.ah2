@@ -329,7 +329,7 @@ AHK_parse(str) {
                         }
                     default:
                         ; RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
-                        RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|?()[]{}.]+", &OutputVar_operator, c_)
+                        RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|?()\[\]{}\.]+", &OutputVar_operator, c_)
                         if (OutputVar_operator.0==":") {
                             ;label
                             c_++
@@ -968,6 +968,13 @@ AHK_parse(str) {
     }
 
     value_expression() {
+        ; hotkeys are values..
+        RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|?()\[\]{}\.]+", &OutputVar_maybeHotkey, c_)
+        if (OutputVar_maybeHotkey && SubStr(OutputVar_maybeHotkey.0, -2)=="::") {
+            aHotkeyWasFound:=backtrack_for_hotkey:=c_ + OutputVar_maybeHotkey.Len
+            return ""
+        }
+
         ; variable, string, number, function call, array access, property access
         ; object literal, array literal
         ; ++assignment
@@ -1121,7 +1128,14 @@ AHK_parse(str) {
                 if (OutputVar_variableName.0 ~= "^[0-9]*$") {
                     RegExMatch(str, "(?![.+]$)\+?\d*(?:\.\d*)?", &OutputVar_variableNameWhat, c_)
                     if (OutputVar_variableNameWhat.Len == 0) {
-                        MsgBox "what is this? parsing number here, c_:" c_
+                        ; found nothing, attempt hotkey
+                        RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|?()\[\]{}\. a-zA-Z0-9_#@$]*?::", &OutputVar_attemptHotkey, c_)
+                        if (OutputVar_attemptHotkey && SubStr(OutputVar_attemptHotkey.0, -2)=="::") {
+                            aHotkeyWasFound:=backtrack_for_hotkey:=c_ + OutputVar_attemptHotkey.Len
+                            return ""
+                        } else {
+                            MsgBox "what is this? parsing number here, c_:" c_
+                        }
                     }
                     left:={type: "number", value: OutputVar_variableNameWhat.0}
                     OutputVar_variableName:=OutputVar_variableNameWhat
@@ -1280,9 +1294,6 @@ AHK_parse(str) {
                         case ":":
                             char2:=SubStr(str, c_ + 1, 1)
                             switch char2 {
-                                ; case ":":
-                                ; aHotkeyWasFound:=backtrack_for_hotkey:=c_ + 2
-                                ; return ""
                                 case "=":
                                     return value_binary(left, ":=") ;Assign
                                 default:
@@ -1451,7 +1462,10 @@ AHK_parse(str) {
 ; AHK_parse(FileRead("switch.ahk"))
 ; AHK_parse(FileRead("switch2.ahk"))
 ; AHK_parse(FileRead("_VD.ahk"))
-AHK_parse("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
+; AHK_parse("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
+; AHK_parse("[::MsgBox hello")
+; AHK_parse("* & a::MsgBox hello")
+; AHK_parse("* & /::MsgBox hello")
 ; AHK_parse(A_Clipboard)
 
 
