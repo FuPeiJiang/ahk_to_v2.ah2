@@ -696,6 +696,8 @@ AHK_parse(str) {
                                 skip_comments()
                         }
                     }
+                case "SplitPath":
+                    boolArr:=[0,1,1,1,1,1]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -1162,8 +1164,8 @@ AHK_parse(str) {
                     bak_OutputVar_comments:=OutputVar_comments
                     char_:=SubStr(str, c_, 1)
                     switch char_ {
-                        case "+", "-", ":", "&", "*", ".", "<", ">", "=", "^", "/", "|":
-                            RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_exprOperator, c_)
+                        case "+", "-", ":", "&", "*", ".", "<", ">", "!", "=", "^", "/", "|":
+                            RegExMatch(str, "(*COMMIT)[&*+\-.\/:<!=>^|]+", &OutputVar_exprOperator, c_)
                             if (OutputVar_exprOperator.0==":") {
                                 return left
                             } else if (OutputVar_exprOperator.0=="++" || OutputVar_exprOperator.0=="--") {
@@ -1333,13 +1335,15 @@ AHK_parse(str) {
 ; AHK_parse("buildNumber:=splitByDot[ComObjCreate()+1]")
 ; AHK_parse("if(true){}else{}")
 ; AHK_parse(FileRead("switch.ahk"))
-AHK_parse(FileRead("switch2.ahk"))
+; AHK_parse(FileRead("switch2.ahk"))
+AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
 superGlobalVarsMap.CaseSense:="Off"
 superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
+    ,"A_Index","A_Index"
     ,"A_MaxHotkeysPerInterval","A_MaxHotkeysPerInterval"
     ,"A_TimeSincePriorHotkey","A_TimeSincePriorHotkey"
     ,"A_PriorHotkey","A_PriorHotkey"
@@ -1354,6 +1358,9 @@ superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
     ,"A_Args","A_Args"
     ,"A_PtrSize","A_PtrSize"
     ,"ErrorLevel","ErrorLevel"
+    ; bool
+    ,"True","True"
+    ,"False","False"
     ; functions
     ,"ComObject","ComObject"
     ,"DllCall","DllCall"
@@ -1367,8 +1374,8 @@ superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
     ,"NumPut","NumPut"
     ,"HasMethod","HasMethod"
     ,"StrPtr","StrPtr"
-    ,"True","True"
-    ,"False","False"
+    ,"InStr","InStr"
+    ,"StrGet","StrGet"
 )
 
 walker_superGlobalVars() {
@@ -1974,7 +1981,17 @@ walker_replacer() {
                     return "(" do(t_, "value") ")"
                 case "pre-unary":
                     if (t_.op == "&") {
-                       _var:=t_.right
+                        _var:=t_.right
+                        ; while (_var.type == "binary") {
+                            ; obj:=_var, key:="left"
+                            ; _var:=_var.left
+                        ; }
+                        ; needs order of operations ?
+                        ; incorrect: unary(sum(buf, var))
+                        ; correct: sum(unary(buf), var))
+                        ; &buf + var
+                        ; ->
+                        ; buf.Ptr + var
                         for _scope in functionScopes {
                             if (_scope.Has(_var.value)) {
                                 switch _scope[_var.value] {
