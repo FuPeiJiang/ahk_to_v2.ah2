@@ -186,8 +186,8 @@ AHK_parse(str) {
                     } else if (OutputVar_operator.0=="=") {
                         c_++
                         skip_comments()
-                        skip_v1str_noNeedToEscapeComma()
-                        currentArr.Push({type: "binary", op: ":=", left:OutputVar_varName.0, right: v1str_to_expression(OutputVar_v1str.0)})
+                        out_v1str:=skip_v1str_noNeedToEscapeComma()
+                        currentArr.Push({type: "binary", op: ":=", left:OutputVar_varName.0, right: v1str_to_expression(out_v1str)})
 
                     } else {
                         ; if it's unary plus, or *2, it's passed to MsgBox as v1str
@@ -329,7 +329,7 @@ AHK_parse(str) {
                         }
                     default:
                         ; RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)
-                        RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|?()\[\]{}\.]+", &OutputVar_operator, c_)
+                        RegExMatch(str, "(*COMMIT)[+\-*\/\.~^&|<!=>?:()\[\]{}]+", &OutputVar_operator, c_)
                         if (OutputVar_operator.0==":") {
                             ;label
                             c_++
@@ -382,8 +382,8 @@ AHK_parse(str) {
                         ; expression
                     } else {
                         ; v1str MsgBox %var%
-                        skip_v1str_commaDelim()
-                        argsArr.Push({type: "directive arg", value: OutputVar_v1str.0})
+                        out_v1str:=skip_v1str_commaDelim()
+                        argsArr.Push({type: "directive arg", value: out_v1str})
                     }
                     continue
                 case ",":
@@ -394,8 +394,8 @@ AHK_parse(str) {
                 break
             }
             ;v1str
-            skip_v1str_commaDelim()
-            argsArr.Push({type: "directive arg", value: OutputVar_v1str.0})
+            out_v1str:=skip_v1str_commaDelim()
+            argsArr.Push({type: "directive arg", value: out_v1str})
         }
 
         switch (OutputVar_varName.0), 0 {
@@ -446,8 +446,8 @@ AHK_parse(str) {
                                     }
                                 } else {
                                     ; v1str MsgBox %var%
-                                    skip_v1str_noNeedToEscapeComma()
-                                    toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                    out_v1str:=skip_v1str_noNeedToEscapeComma()
+                                    toPush:=v1str_to_expression(out_v1str)
                                 }
                                 skip_comments()
                                 continue
@@ -464,23 +464,25 @@ AHK_parse(str) {
                         ;v1str
 
                         cBak:=c_
-                        skip_v1str_commaDelim()
-                        if (OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$") { ;regex: number
-                            toPush:={type: "number", value: OutputVar_v1str.0}
+                        out_v1str:=skip_v1str_commaDelim()
+                        if (out_v1str~="^(?![.+]$)\+?\d*(?:\.\d*)?$") { ;regex: number
+                            toPush:={type: "number", value: out_v1str}
                         } else if (argsArr.Length==1 || argsArr.Length==2) {
-                            toPush:=v1str_to_expression(OutputVar_v1str.0)
+                            toPush:=v1str_to_expression(out_v1str)
                             cLoL:=cBak
-                        } else if (argsArr.Length==3 && !(OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$")) {
+                        } else if (argsArr.Length==3 && !(out_v1str~="^(?![.+]$)\+?\d*(?:\.\d*)?$")) {
                             c_:=cLoL
-                            skip_v1str_noNeedToEscapeComma()
-                            toPush:=v1str_to_expression(OutputVar_v1str.0)
+                            out_v1str:=skip_v1str_noNeedToEscapeComma()
+                            toPush:=v1str_to_expression(out_v1str)
                             argsArr.Pop()
                         } else {
                             c_:=cBak
-                            skip_v1str_noNeedToEscapeComma()
-                            toPush:=v1str_to_expression(OutputVar_v1str.0)
+                            out_v1str:=skip_v1str_noNeedToEscapeComma()
+                            toPush:=v1str_to_expression(out_v1str)
                         }
-                        skip_comments()
+                        if (aHotkeyWasFound) {
+                            break
+                        }
                         continue
                     }
                     argsArr.Push(toPush ? toPush : {type:"command empty arg"})
@@ -589,21 +591,10 @@ AHK_parse(str) {
                                 skip_comments()
                                 toPush:=value_expression()
                             } else {
-                                ; v1str MsgBox %var%
-                                ; if (argNum == boolArr.Length) {
-                                    ; skip_v1str_noNeedToEscapeComma_bracketDelim()
-                                    ; RegExMatch(str, "[^\s{]+(?:[ \t]+[^; \t{][^\s{]*)*", &OutputVar_v1str, c_)
-                                    ; c_+=OutputVar_v1str.Len
-                                    ; toPush:=v1str_to_expression(OutputVar_v1str.0)
-                                    ; skip_comments()
-                                    ; break
-                                ; } else {
-                                    ; skip_v1str_commaBracketDelim()
-                                    RegExMatch(str, "[^\s{,]+(?:[ \t]+[^; \t{,][^\s{,]*)*", &OutputVar_v1str, c_)
-                                    c_+=OutputVar_v1str.Len
-                                    toPush:=v1str_to_expression(OutputVar_v1str.0)
-                                    skip_comments()
-                                ; }
+                                RegExMatch(str, "[^\s{,]+(?:[ \t]+[^; \t{,][^\s{,]*)*", &OutputVar_v1str, c_)
+                                c_+=OutputVar_v1str.Len
+                                toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                skip_comments()
                             }
                         case "{":
                             ; loop { forever
@@ -730,14 +721,12 @@ AHK_parse(str) {
                             } else {
                                 ; v1str MsgBox %var%
                                 if (argNum == boolArr.Length) {
-                                    skip_v1str_noNeedToEscapeComma()
-                                    toPush:=v1str_to_expression(OutputVar_v1str.0)
-                                    skip_comments()
+                                    out_v1str:=skip_v1str_noNeedToEscapeComma()
+                                    toPush:=v1str_to_expression(out_v1str)
                                     break
                                 } else {
-                                    skip_v1str_commaDelim()
-                                    toPush:=v1str_to_expression(OutputVar_v1str.0)
-                                    skip_comments()
+                                    out_v1str:=skip_v1str_commaDelim()
+                                    toPush:=v1str_to_expression(out_v1str)
                                     if (InStr(OutputVar_comments.0, "`n", true)) {
                                         break
                                     }
@@ -759,13 +748,11 @@ AHK_parse(str) {
                         case 1:
                             toPush:={type:"v2 pre-unary", op:"&", right:value_expression()}
                         case 2:
-                            skip_v1str_commaDelim()
-                            toPush:=v1str_to_expression(OutputVar_v1str.0)
-                            skip_comments()
+                            out_v1str:=skip_v1str_commaDelim()
+                            toPush:=v1str_to_expression(out_v1str)
                         case 3:
-                            skip_v1str_noNeedToEscapeComma()
-                            toPush:=v1str_to_expression(OutputVar_v1str.0)
-                            skip_comments()
+                            out_v1str:=skip_v1str_noNeedToEscapeComma()
+                            toPush:=v1str_to_expression(out_v1str)
                     }
                     if (InStr(OutputVar_comments.0, "`n", true)) {
                         break
@@ -909,12 +896,6 @@ AHK_parse(str) {
                 add_command(OutputVar_varName.0, argsArr)
 
         }
-        if (aHotkeyWasFound) {
-            c_:=aHotkeyWasFound
-            aHotkeyWasFound:=0
-            add_hotkey()
-        }
-
     }
 
     v1str_to_expression(str) {
@@ -929,13 +910,57 @@ AHK_parse(str) {
     }
 
     skip_v1str_commaDelim() {
-        RegExMatch(str, "[^\s,]+(?:[ \t]+[^; \t,][^\s,]*)*", &OutputVar_v1str, c_)
-        c_+=OutputVar_v1str.Len
+        aHotkeyWasFound:=backtrack_for_hotkey:=c_
+
+        ret_v1str:=""
+        while (true) {
+            RegExMatch(str, "[^\s,]+(?:[ \t]+[^; \t,][^\s,]*)*", &OutputVar_v1str, c_)
+            if (InStr(OutputVar_v1str.0, "::", true)) {
+                aHotkeyWasFound:=backtrack_for_hotkey:=c_
+                return ret_v1str
+            }
+            if (A_Index > 1) {
+                ret_v1str.=" "
+            }
+            ret_v1str.=OutputVar_v1str.0
+            c_+=OutputVar_v1str.Len
+            skip_comments()
+            char_nl:=SubStr(str, c_, 1)
+            switch char_nl {
+                case "+", "-", "*", "/", ".", "~", "^", "&", "|", "<", "!", "=", ">", "?", ":":
+                    continue
+                default:
+                    break
+            }
+        }
+        return ret_v1str
     }
 
     skip_v1str_noNeedToEscapeComma() {
-        RegExMatch(str, "\S+(?:[ \t]+[^; \t]\S*)*", &OutputVar_v1str, c_)
-        c_+=OutputVar_v1str.Len
+        aHotkeyWasFound:=backtrack_for_hotkey:=c_
+
+        ret_v1str:=""
+        while (true) {
+            RegExMatch(str, "\S+(?:[ \t]+[^; \t]\S*)*", &OutputVar_v1str, c_)
+            if (InStr(OutputVar_v1str.0, "::", true)) {
+                aHotkeyWasFound:=backtrack_for_hotkey:=c_
+                return ret_v1str
+            }
+            if (A_Index > 1) {
+                ret_v1str.=" "
+            }
+            ret_v1str.=OutputVar_v1str.0
+            c_+=OutputVar_v1str.Len
+            skip_comments()
+            char_nl:=SubStr(str, c_, 1)
+            switch char_nl {
+                case ",", "+", "-", "*", "/", ".", "~", "^", "&", "|", "<", "!", "=", ">", "?", ":":
+                    continue
+                default:
+                    break
+            }
+        }
+        return ret_v1str
     }
 
     skip_expression() {
@@ -1259,19 +1284,11 @@ AHK_parse(str) {
                                 default:
                                     return value_binary(left, ".") ;concat
                             }
-                        case "!":
+                        case "~":
                             char2:=SubStr(str, c_ + 1, 1)
                             switch char2 {
                                 case "=":
-                                    return value_binary(left, "!=") ;not-equal
-                            }
-                        case "=":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "=":
-                                    return value_binary(left, "==") ;case-sensitive-equal
-                                default:
-                                    return value_binary(left, "=") ;Equal
+                                    return value_binary(left, "~=") ;regex match
                             }
                         case "^":
                             char2:=SubStr(str, c_ + 1, 1)
@@ -1301,16 +1318,37 @@ AHK_parse(str) {
                                 default:
                                     return value_binary(left, "|") ;bitwise-or
                             }
-                        case ":":
+                        case "<":
                             char2:=SubStr(str, c_ + 1, 1)
                             switch char2 {
-                                case ":":
-                                    aHotkeyWasFound:=backtrack_for_hotkey:=c_ + 2
-                                    return ""
+                                case ">":
+                                    return value_binary(left, "<>") ;not-equal
                                 case "=":
-                                    return value_binary(left, ":=") ;Assign
+                                    return value_binary(left, "<=") ;less-or-equal
                                 default:
-                                    return left ;ternary-colon, taken care of by "?"
+                                    return value_binary(left, "<") ;less
+                            }
+                        case "!":
+                            char2:=SubStr(str, c_ + 1, 1)
+                            switch char2 {
+                                case "=":
+                                    return value_binary(left, "!=") ;not-equal
+                            }
+                        case "<":
+                            char2:=SubStr(str, c_ + 1, 1)
+                            switch char2 {
+                                case "=":
+                                    return value_binary(left, ">=") ;greater-or-equal
+                                default:
+                                    return value_binary(left, ">") ;greater
+                            }
+                        case "=":
+                            char2:=SubStr(str, c_ + 1, 1)
+                            switch char2 {
+                                case "=":
+                                    return value_binary(left, "==") ;case-sensitive-equal
+                                default:
+                                    return value_binary(left, "=") ;Equal
                             }
                         case "?":
                             c_++
@@ -1340,6 +1378,17 @@ AHK_parse(str) {
                                 return {type:"ternary",condition:left,ifTrue:right,ifFalse:ifFalse}
                             } else {
                                 MsgBox "You Need a : to your ?"
+                            }
+                        case ":":
+                            char2:=SubStr(str, c_ + 1, 1)
+                            switch char2 {
+                                case ":":
+                                    aHotkeyWasFound:=backtrack_for_hotkey:=c_ + 2
+                                    return ""
+                                case "=":
+                                    return value_binary(left, ":=") ;Assign
+                                default:
+                                    return left ;ternary-colon, taken care of by "?"
                             }
                         case "``":
                             colonPos:=InStr(str, "::", true, c_ + 1)
@@ -1482,7 +1531,9 @@ AHK_parse(str) {
 ; AHK_parse("* & /::MsgBox hello")
 ; AHK_parse("+ & a::MsgBox hello")
 ; AHK_parse("MsgBox % 2`n+ & a::MsgBox hello")
-AHK_parse("MsgBox 2`n+ & a::MsgBox hello")
+; AHK_parse("MsgBox 2`n+ & a::MsgBox hello")
+; AHK_parse("MsgBox % 2`n+2`n+ & a::MsgBox hello")
+AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
 ; AHK_parse(":::MsgBox hello")
 ; AHK_parse("Enter::MsgBox hello")
 ; AHK_parse(A_Clipboard)
