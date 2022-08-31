@@ -465,8 +465,8 @@ AHK_parse(str) {
 
                         cBak:=c_
                         skip_v1str_commaDelim()
-                        if (OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$") {
-                            toPush:=OutputVar_v1str.0
+                        if (OutputVar_v1str.0~="^(?![.+]$)\+?\d*(?:\.\d*)?$") { ;regex: number
+                            toPush:={type: "number", value: OutputVar_v1str.0}
                         } else if (argsArr.Length==1 || argsArr.Length==2) {
                             toPush:=v1str_to_expression(OutputVar_v1str.0)
                             cLoL:=cBak
@@ -1097,7 +1097,17 @@ AHK_parse(str) {
                 case "+", "-", "!", "~", "&":
                     c_++
                     skip_comments()
+                    bak_OutputVar_comments:=OutputVar_comments
                     right:=value_expression()
+                    if (backtrack_for_hotkey) {
+                        if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
+                            c1:=cBakComments + pos
+                            backtrack_for_hotkey:=0
+                            return left
+                        } else {
+                            return ""
+                        }
+                    }
 
                     op:=char2
                     if (right.type == "binary" && orderOfOperations[right.op] > orderOfOperations[op]) {
@@ -1294,6 +1304,9 @@ AHK_parse(str) {
                         case ":":
                             char2:=SubStr(str, c_ + 1, 1)
                             switch char2 {
+                                case ":":
+                                    aHotkeyWasFound:=backtrack_for_hotkey:=c_ + 2
+                                    return ""
                                 case "=":
                                     return value_binary(left, ":=") ;Assign
                                 default:
@@ -1466,6 +1479,12 @@ AHK_parse(str) {
 ; AHK_parse("[::MsgBox hello")
 ; AHK_parse("* & a::MsgBox hello")
 ; AHK_parse("* & /::MsgBox hello")
+; AHK_parse("* & /::MsgBox hello")
+; AHK_parse("+ & a::MsgBox hello")
+; AHK_parse("MsgBox % 2`n+ & a::MsgBox hello")
+AHK_parse("MsgBox 2`n+ & a::MsgBox hello")
+; AHK_parse(":::MsgBox hello")
+; AHK_parse("Enter::MsgBox hello")
 ; AHK_parse(A_Clipboard)
 
 
