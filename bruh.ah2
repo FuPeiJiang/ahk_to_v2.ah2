@@ -1130,7 +1130,15 @@ AHK_parse(str) {
                     ; string literal
                     break
                 case "+", "-", "!", "~", "&":
-                    c_++
+                    twoChars:=SubStr(str, c_, 2)
+                    switch twoChars {
+                        case "++", "--":
+                            c_+=2
+                            op:=twoChars
+                        default:
+                            c_++
+                            op:=char2
+                    }
                     skip_comments()
                     bak_OutputVar_comments:=OutputVar_comments
                     right:=value_expression()
@@ -1144,7 +1152,6 @@ AHK_parse(str) {
                         }
                     }
 
-                    op:=char2
                     if (right.type == "binary" && orderOfOperations[right.op] > orderOfOperations[op]) {
                         left:={type:"pre-unary", op:op, right:right.left}
                         op:=right.op
@@ -1240,7 +1247,7 @@ AHK_parse(str) {
                             char2:=SubStr(str, c_ + 1, 1)
                             switch char2 {
                                 case "+":
-                                    c_++
+                                    c_+=2
                                     skip_comments()
                                     return {type:"post-unary assignment", left:left, op:"++"} ;post-increment
                                 case "=":
@@ -1252,7 +1259,7 @@ AHK_parse(str) {
                             char2:=SubStr(str, c_ + 1, 1)
                             switch char2 {
                                 case "-":
-                                    c_++
+                                    c_+=2
                                     skip_comments()
                                     return {type:"post-unary assignment", left:left, op:"--"} ;post-decrement
                                 case "=":
@@ -1549,7 +1556,7 @@ AHK_parse(str) {
 ; AHK_parse("if(true){}else{}")
 ; AHK_parse(FileRead("switch.ahk"))
 ; AHK_parse(FileRead("switch2.ahk"))
-AHK_parse(FileRead("_VD.ahk"))
+; AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; AHK_parse("[::MsgBox hello")
 ; AHK_parse("* & a::MsgBox hello")
@@ -1562,7 +1569,7 @@ AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
 ; AHK_parse(":::MsgBox hello")
 ; AHK_parse("Enter::MsgBox hello")
-; AHK_parse(A_Clipboard)
+AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
