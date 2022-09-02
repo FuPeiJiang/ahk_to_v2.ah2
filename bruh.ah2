@@ -1556,7 +1556,7 @@ AHK_parse(str) {
 ; AHK_parse("if(true){}else{}")
 ; AHK_parse(FileRead("switch.ahk"))
 ; AHK_parse(FileRead("switch2.ahk"))
-; AHK_parse(FileRead("_VD.ahk"))
+AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; AHK_parse("[::MsgBox hello")
 ; AHK_parse("* & a::MsgBox hello")
@@ -1569,7 +1569,7 @@ AHK_parse(str) {
 ; AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
 ; AHK_parse(":::MsgBox hello")
 ; AHK_parse("Enter::MsgBox hello")
-AHK_parse(A_Clipboard)
+; AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
@@ -2186,7 +2186,24 @@ walker_replacer() {
                                     switch _scope[t_.value] {
                                         case "ReadLine Line":
                                             ; var -> var "`n"
-                                            replacement:={left:{type:"variable", value:t_.value}, op:" ", right:{type:"string", value:"``n"}, type:"concat"}
+                                            replacement:={left:t_, op:" ", right:{type:"string", value:"``n"}, type:"concat"}
+                                            if (Type(obj) == "Object") {
+                                                obj.%key%:=replacement
+                                            } else {
+                                                obj[key]:=replacement
+                                            }
+                                            case "ReadLine Line":
+                                        case "WinGetList Array":
+                                            ; ids -> ids.Length
+                                            replacement:={type: "property access", parent: t_, propName: "Length"}
+                                            if (Type(obj) == "Object") {
+                                                obj.%key%:=replacement
+                                            } else {
+                                                obj[key]:=replacement
+                                            }
+                                        case "WinGetList Element":
+                                            ; ids%A_Index% -> ids[A_Index]
+                                            replacement:={type: "array access", parent: {type: "variable", value: SubStr(t_.value, 1, -9)}, key: {type: "variable", value: "A_Index"}}
                                             if (Type(obj) == "Object") {
                                                 obj.%key%:=replacement
                                             } else {
@@ -2348,6 +2365,11 @@ walker_replacer() {
                                         }
 
                                         i_+=2
+                                    }
+                                case "WinGetList":
+                                    if (obj.type == "binary") {
+                                        currentScope[obj.left.value]:="WinGetList Array"
+                                        currentScope[obj.left.value "%A_Index%"]:="WinGetList Element"
                                     }
                             }
                         case "property access":
