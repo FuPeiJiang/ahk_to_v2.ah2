@@ -33,8 +33,55 @@ ok:={
     type: "binary"
 }
 
-order:=Map("+", 2, "*", 1)
-if (ok.right.type == "binary" && order[ok.right.op] > order[ok.op]) {
+orderOfOperations:=Map(
+    ":=", 11,
+    "+=", 11,
+    "-=", 11,
+    "*=", 11,
+    "/=", 11,
+    "//=", 11,
+    ".=", 11,
+    "|=", 11,
+    "&=", 11,
+    "^=", 11,
+    ">>=", 11,
+    "<<=", 11,
+
+    "||", 10,
+
+    "&&", 9,
+
+    "=", 8,
+    "==", 8,
+    "<>", 8,
+    "!=", 8,
+
+    ">", 7,
+    "<", 7,
+    ">=", 7,
+    "<=", 7,
+
+    "~=", 6,
+
+    ".", 5,
+
+    "&", 4,
+    "^", 4,
+    "|", 4,
+
+    "<<", 3,
+    ">>", 3,
+
+    "+", 2,
+    "-", 2,
+
+    "*", 1,
+    "/", 1,
+    "//", 1,
+
+    "**", 0,
+)
+if (ok.right.type == "binary" && orderOfOperations[ok.right.op] > orderOfOperations[ok.op]) {
     ok.left:={type:"binary", op:ok.op, left: ok.left, right:ok.right.left}
     ok.op:=ok.right.op
     ok.right:=ok.right.right

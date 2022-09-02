@@ -29,7 +29,9 @@ AHK_parse(str) {
     hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
     labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
 
-    orderOfOperations:=Map(":=", 3, "+", 2, "*", 1, "&", 0)
+    orderOfOperations:=Map(
+        ":=", 11, "+=", 11, "-=", 11, "*=", 11, "/=", 11, "//=", 11, ".=", 11, "|=", 11, "&=", 11, "^=", 11, ">>=", 11, "<<=", 11, "||", 10, "&&", 9, "=", 8, "==", 8, "<>", 8, "!=", 8, ">", 7, "<", 7, ">=", 7, "<=", 7, "~=", 6, ".", 5, "&", 4, "^", 4, "|", 4, "<<", 3, ">>", 3, "+", 2, "-", 2, "*", 1, "/", 1, "//", 1, "**", 0,
+    )
 
     skip_comments()
 
@@ -465,6 +467,7 @@ AHK_parse(str) {
 
                         cBak:=c_
                         out_v1str:=skip_v1str_commaDelim()
+                        OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                         if (out_v1str~="^(?![.+]$)\+?\d*(?:\.\d*)?$") { ;regex: number
                             toPush:={type: "number", value: out_v1str}
                         } else if (argsArr.Length==1 || argsArr.Length==2) {
@@ -473,13 +476,16 @@ AHK_parse(str) {
                         } else if (argsArr.Length==3 && !(out_v1str~="^(?![.+]$)\+?\d*(?:\.\d*)?$")) {
                             c_:=cLoL
                             out_v1str:=skip_v1str_noNeedToEscapeComma()
+                            OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                             toPush:=v1str_to_expression(out_v1str)
                             argsArr.Pop()
                         } else {
                             c_:=cBak
                             out_v1str:=skip_v1str_noNeedToEscapeComma()
+                            OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                             toPush:=v1str_to_expression(out_v1str)
                         }
+                        OutputVar_comments:=OutputVar_comments_bak ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                         if (aHotkeyWasFound) {
                             break
                         }
@@ -742,6 +748,7 @@ AHK_parse(str) {
                             continue
                     }
                     ;v1str
+                    OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                     switch boolArr[argNum] {
                         case 0:
                             toPush:=value_expression()
@@ -749,11 +756,14 @@ AHK_parse(str) {
                             toPush:={type:"v2 pre-unary", op:"&", right:value_expression()}
                         case 2:
                             out_v1str:=skip_v1str_commaDelim()
+                            OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                             toPush:=v1str_to_expression(out_v1str)
                         case 3:
                             out_v1str:=skip_v1str_noNeedToEscapeComma()
+                            OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                             toPush:=v1str_to_expression(out_v1str)
                     }
+                    OutputVar_comments:=OutputVar_comments_bak ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                     if (InStr(OutputVar_comments.0, "`n", true)) {
                         break
                     }
@@ -910,16 +920,16 @@ AHK_parse(str) {
     }
 
     skip_v1str_commaDelim() {
-        aHotkeyWasFound:=backtrack_for_hotkey:=c_
+        aHotkeyWasFound:=backtrack_for_hotkey:=0
 
         ret_v1str:=""
         while (true) {
             RegExMatch(str, "[^\s,]+(?:[ \t]+[^; \t,][^\s,]*)*", &OutputVar_v1str, c_)
-            if (InStr(OutputVar_v1str.0, "::", true)) {
-                aHotkeyWasFound:=backtrack_for_hotkey:=c_
-                return ret_v1str
-            }
             if (A_Index > 1) {
+                if (InStr(OutputVar_v1str.0, "::", true)) {
+                    aHotkeyWasFound:=backtrack_for_hotkey:=c_
+                    return ret_v1str
+                }
                 ret_v1str.=" "
             }
             ret_v1str.=OutputVar_v1str.0
@@ -937,16 +947,16 @@ AHK_parse(str) {
     }
 
     skip_v1str_noNeedToEscapeComma() {
-        aHotkeyWasFound:=backtrack_for_hotkey:=c_
+        aHotkeyWasFound:=backtrack_for_hotkey:=0
 
         ret_v1str:=""
         while (true) {
             RegExMatch(str, "\S+(?:[ \t]+[^; \t]\S*)*", &OutputVar_v1str, c_)
-            if (InStr(OutputVar_v1str.0, "::", true)) {
-                aHotkeyWasFound:=backtrack_for_hotkey:=c_
-                return ret_v1str
-            }
             if (A_Index > 1) {
+                if (InStr(OutputVar_v1str.0, "::", true)) {
+                    aHotkeyWasFound:=backtrack_for_hotkey:=c_
+                    return ret_v1str
+                }
                 ret_v1str.=" "
             }
             ret_v1str.=OutputVar_v1str.0
@@ -1264,7 +1274,7 @@ AHK_parse(str) {
                             char2:=SubStr(str, c_ + 1, 1)
                             switch char2 {
                                 case "/":
-                                    char3:=SubStr(str, c_ + 1, 1)
+                                    char3:=SubStr(str, c_ + 2, 1)
                                     switch char3 {
                                         case "=":
                                             return value_binary(left, "//=") ;Floor divide=>assign
@@ -1321,6 +1331,14 @@ AHK_parse(str) {
                         case "<":
                             char2:=SubStr(str, c_ + 1, 1)
                             switch char2 {
+                                case "<":
+                                    char3:=SubStr(str, c_ + 2, 1)
+                                    switch char3 {
+                                        case "=":
+                                            return value_binary(left, "<<=") ;Bit shift left=>assign
+                                        default:
+                                            return value_binary(left, "<<") ;Bit shift left
+                                    }
                                 case ">":
                                     return value_binary(left, "<>") ;not-equal
                                 case "=":
@@ -1334,22 +1352,30 @@ AHK_parse(str) {
                                 case "=":
                                     return value_binary(left, "!=") ;not-equal
                             }
-                        case "<":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "=":
-                                    return value_binary(left, ">=") ;greater-or-equal
-                                default:
-                                    return value_binary(left, ">") ;greater
-                            }
-                        case "=":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "=":
-                                    return value_binary(left, "==") ;case-sensitive-equal
-                                default:
-                                    return value_binary(left, "=") ;Equal
-                            }
+                            case "=":
+                                char2:=SubStr(str, c_ + 1, 1)
+                                switch char2 {
+                                    case "=":
+                                        return value_binary(left, "==") ;case-sensitive-equal
+                                    default:
+                                        return value_binary(left, "=") ;Equal
+                                }
+                            case ">":
+                                char2:=SubStr(str, c_ + 1, 1)
+                                switch char2 {
+                                    case ">":
+                                        char3:=SubStr(str, c_ + 2, 1)
+                                        switch char3 {
+                                            case "=":
+                                                return value_binary(left, ">>=") ;Bit shift right=>assign
+                                            default:
+                                                return value_binary(left, ">>") ;Bit shift right
+                                        }
+                                    case "=":
+                                        return value_binary(left, ">=") ;greater-or-equal
+                                    default:
+                                        return value_binary(left, ">") ;greater
+                                }
                         case "?":
                             c_++
                             skip_comments()
@@ -1523,7 +1549,7 @@ AHK_parse(str) {
 ; AHK_parse("if(true){}else{}")
 ; AHK_parse(FileRead("switch.ahk"))
 ; AHK_parse(FileRead("switch2.ahk"))
-; AHK_parse(FileRead("_VD.ahk"))
+AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; AHK_parse("[::MsgBox hello")
 ; AHK_parse("* & a::MsgBox hello")
@@ -1533,7 +1559,7 @@ AHK_parse(str) {
 ; AHK_parse("MsgBox % 2`n+ & a::MsgBox hello")
 ; AHK_parse("MsgBox 2`n+ & a::MsgBox hello")
 ; AHK_parse("MsgBox % 2`n+2`n+ & a::MsgBox hello")
-AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
+; AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
 ; AHK_parse(":::MsgBox hello")
 ; AHK_parse("Enter::MsgBox hello")
 ; AHK_parse(A_Clipboard)
@@ -2204,11 +2230,11 @@ walker_replacer() {
                                         }
                                         return do(obj, key)
                                     case "Buffer with Ptr":
-                                        if (obj.op == "+" || obj.op == "-") {
-                                            _var:={type: "property access", parent: _var, propName: "Ptr"}
-                                        }
                                         ; &var -> var
                                         if (Type(obj) == "Object") {
+                                            if (obj.op == "+" || obj.op == "-") {
+                                                _var:={type: "property access", parent: _var, propName: "Ptr"}
+                                            }
                                             obj.%key%:=_var
                                         } else {
                                             obj[key]:=_var
