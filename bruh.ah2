@@ -371,8 +371,8 @@ AHK_parse(str) {
     skip_directiveArgs() {
         argsArr:=[]
 
+        skip_comments()
         loop {
-            skip_comments()
             char_:=SubStr(str, c_, 1)
             switch char_ {
                 case "":
@@ -1580,7 +1580,7 @@ string_to_variable_or_prop(str) {
 ; AHK_parse("if(true){}else{}")
 ; AHK_parse(FileRead("switch.ahk"))
 ; AHK_parse(FileRead("switch2.ahk"))
-AHK_parse(FileRead("_VD.ahk"))
+; AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; AHK_parse("[::MsgBox hello")
 ; AHK_parse("* & a::MsgBox hello")
@@ -1593,7 +1593,7 @@ AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
 ; AHK_parse(":::MsgBox hello")
 ; AHK_parse("Enter::MsgBox hello")
-; AHK_parse(A_Clipboard)
+AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
