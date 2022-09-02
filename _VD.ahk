@@ -952,15 +952,6 @@ class VD {
         ; DetectHiddenWindows, off ;this is needed, but for optimization the caller will do it
         return returnValue
     }
-    _IsViewActive(Ptr_View) {
-        found:=this._getFirstValidWindow(wintitle)
-        if (!found) {
-            return false
-        }
-        thePView:=found[2]
-
-        return thePView == Ptr_View
-    }
     ;-------------------
     _vtable(ppv, index) {
         Return NumGet(NumGet(0+ppv)+A_PtrSize*index)

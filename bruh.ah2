@@ -1540,6 +1540,16 @@ AHK_parse(str) {
     }
 
 }
+string_to_variable_or_prop(str) {
+    loop parse str, "." {
+        if (A_Index > 1) {
+            parent:={type: "property access", parent: parent, propName: A_LoopField}
+        } else {
+            parent:={type:"variable", value:A_LoopField}
+        }
+    }
+    return parent
+}
 
 
 ; AHK_parse(FileRead("test.ahk"))
@@ -2376,6 +2386,9 @@ walker_replacer() {
 
                                         i_+=2
                                     }
+                                case "RegisterCallback":
+                                    t_.func.value:="CallbackCreate"
+                                    t_.args[1]:=string_to_variable_or_prop(t_.args[1].value)
                                 case "WinGetList":
                                     if (obj.type == "binary") {
                                         currentScope[obj.left.value]:="WinGetList Array"
