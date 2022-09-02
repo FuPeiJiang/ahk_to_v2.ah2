@@ -30,7 +30,7 @@ AHK_parse(str) {
     labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
 
     orderOfOperations:=Map(
-        ":=", 11, "+=", 11, "-=", 11, "*=", 11, "/=", 11, "//=", 11, ".=", 11, "|=", 11, "&=", 11, "^=", 11, ">>=", 11, "<<=", 11, "||", 10, "&&", 9, "=", 8, "==", 8, "<>", 8, "!=", 8, ">", 7, "<", 7, ">=", 7, "<=", 7, "~=", 6, ".", 5, "&", 4, "^", 4, "|", 4, "<<", 3, ">>", 3, "+", 2, "-", 2, "*", 1, "/", 1, "//", 1, "**", 0,
+        ":=", 11, "+=", 11, "-=", 11, "*=", 11, "/=", 11, "//=", 11, ".=", 11, "|=", 11, "&=", 11, "^=", 11, ">>=", 11, "<<=", 11, "||", 10, "or", 10, "&&", 9, "and", 9, "=", 8, "==", 8, "<>", 8, "!=", 8, ">", 7, "<", 7, ">=", 7, "<=", 7, "~=", 6, ".", 5, "&", 4, "^", 4, "|", 4, "<<", 3, ">>", 3, "+", 2, "-", 2, "*", 1, "/", 1, "//", 1, "**", 0,
     )
 
     skip_comments()
@@ -732,7 +732,9 @@ AHK_parse(str) {
                                     break
                                 } else {
                                     out_v1str:=skip_v1str_commaDelim()
+                                    OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                                     toPush:=v1str_to_expression(out_v1str)
+                                    OutputVar_comments:=OutputVar_comments_bak ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                                     if (InStr(OutputVar_comments.0, "`n", true)) {
                                         break
                                     }
