@@ -604,6 +604,11 @@ AHK_parse(str) {
                             }
                         case "{":
                             ; loop { forever
+
+                            ;the label is a loop label, not a label: return pair
+                            if (currentArr.Length && currentArr[currentArr.Length].type == "label") {
+                                labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
+                            }
                             currentArr.Push({type:"loop with block1"})
                             return
                         ; no condition
@@ -619,7 +624,10 @@ AHK_parse(str) {
                             skip_comments()
 
                     }
-                    ; toPush:=v1str_to_expression(OutputVar_v1str.0)
+                    ;the label is a loop label, not a label: return pair
+                    if (currentArr.Length && currentArr[currentArr.Length].type == "label") {
+                        labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
+                    }
                     char_:=SubStr(str, c_, 1)
                     if (char_=="{") {
                         currentArr.Push({type:"loop with block2"})
