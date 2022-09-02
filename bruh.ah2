@@ -1461,6 +1461,10 @@ AHK_parse(str) {
                     } else if (InStr(OutputVar_comments.0, "`n", true)) {
                         return left
                     } else {
+                        ;new IObjectArray() -> IObjectArray()
+                        if (left.type == "variable" && left.value = "new") {
+                            return value_expression()
+                        }
                         return {type: "concat", op: OutputVar_comments.0, left:left, right: value_expression()}
                     }
                     value_binary(left, op) {
