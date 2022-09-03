@@ -493,7 +493,8 @@ AHK_parse(str) {
                     }
                     argsArr.Push(toPush ? toPush : {type:"command empty arg"})
                     break bruh
-                case "Sleep", "break":
+                case "Sleep", "break"
+                , "SetWinDelay", "SetControlDelay":
                     boolArr:=[0]
                 case "Send","SendRaw","SendInput","SendPlay","SendEvent"
                 ,"SendMode", "SetWorkingDir", "SetBatchLines", "ListLines"
@@ -637,7 +638,7 @@ AHK_parse(str) {
                         currentArr.Push({type: "condition without block", expr: toPush})
                     }
                     return
-                case "WinActivate":
+                case "WinActivate", "WinHide":
                     boolArr:=[2,2,2,3]
                 case "WinGetTitle", "WinGetClass":
                     boolArr:=[0,2,2,2,3]
@@ -706,6 +707,8 @@ AHK_parse(str) {
                     }
                 case "SplitPath":
                     boolArr:=[0,1,1,1,1,1]
+                case "Sort":
+                    boolArr:=[0,3]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -912,6 +915,9 @@ AHK_parse(str) {
                 }
                 currentArr.Push({type: "binary", op: ":=", left:argsArr.RemoveAt(1), right: {type: "function call", func: {type:"variable"
                 , value:winGetCommand}, args: argsArr}})
+            case "Sort":
+                currentArr.Push({type: "binary", op: ":=", left:argsArr[1], right: {type: "function call", func: {type:"variable"
+                , value:"Sort"}, args: argsArr}})
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -1154,7 +1160,6 @@ AHK_parse(str) {
                     right:=value_expression()
                     if (backtrack_for_hotkey) {
                         if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
-                            c1:=cBakComments + pos
                             backtrack_for_hotkey:=0
                             return left
                         } else {
@@ -1220,21 +1225,31 @@ AHK_parse(str) {
                         char_:=SubStr(str, c_, 1)
                         switch char_ {
                             case ")":
-                                if (left.type=="variable") {
-                                    switch left.value, 0 {
-                                        case "ComObjCreate":
-                                            left.value:="ComObject"
-                                    }
-                                }
-                                left:={type: "function call", func: left, args: args}
-                                c_++
                                 break
                             case ",":
+                                args.push({type: "function call empty arg"})
                                 c_++
                                 skip_comments()
+                            default:
+                                args.Push(value_expression())
+                                char_:=SubStr(str, c_, 1)
+                                switch char_ {
+                                    case ")":
+                                        break
+                                    case ",":
+                                        c_++
+                                        skip_comments()
+                                }
                         }
-                        args.Push(value_expression())
                     }
+                    if (left.type=="variable") {
+                        switch left.value, 0 {
+                            case "ComObjCreate":
+                                left.value:="ComObject"
+                        }
+                    }
+                    left:={type: "function call", func: left, args: args}
+                    c_++
                 case "[":
                     ; array access or map access (same syntactically..)
                     c_++
@@ -1243,232 +1258,166 @@ AHK_parse(str) {
                     c_++
                 case ".":
                     ; property access
-                    c_++
-                    RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
-                    c_+=OutputVar_variableName.Len
-                    left:={type: "property access", parent: left, propName: OutputVar_variableName.0}
+                    char_:=SubStr(str, c_ + 1, 1)
+                    if (char_ == "=") { ; .=
+                        left:=do_operator()
+                    } else {
+                        c_++
+                        RegExMatch(str, "[a-zA-Z0-9_#@$\x80-\x{10ffff}]*", &OutputVar_variableName, c_)
+                        c_+=OutputVar_variableName.Len
+                        left:={type: "property access", parent: left, propName: OutputVar_variableName.0}
+                    }
                 default:
-                    cBakComments:=c_
-                    skip_comments()
-                    bak_OutputVar_comments:=OutputVar_comments
-                    char_:=SubStr(str, c_, 1)
-                    switch char_ {
-                        case "+":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "+":
-                                    c_+=2
-                                    skip_comments()
-                                    return {type:"post-unary assignment", left:left, op:"++"} ;post-increment
-                                case "=":
-                                    return value_binary(left, "+=") ;add=>assign
-                                default:
-                                    return value_binary(left, "+") ;add
-                            }
-                        case "-":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "-":
-                                    c_+=2
-                                    skip_comments()
-                                    return {type:"post-unary assignment", left:left, op:"--"} ;post-decrement
-                                case "=":
-                                    return value_binary(left, "-=") ;sub=>assign
-                                default:
-                                    return value_binary(left, "-") ;sub
-                            }
-                        case "*":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "*":
-                                    return value_binary(left, "**") ;power
-                                case "=":
-                                    return value_binary(left, "*=") ;mul=>assign
-                                default:
-                                    return value_binary(left, "*") ;mul
-                            }
-                        case "/":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "/":
-                                    char3:=SubStr(str, c_ + 2, 1)
-                                    switch char3 {
-                                        case "=":
-                                            return value_binary(left, "//=") ;Floor divide=>assign
-                                        default:
-                                            return value_binary(left, "//") ;Floor divide
-                                    }
-                                case "=":
-                                    return value_binary(left, "/=") ;True divide=>assign
-                                default:
-                                    return value_binary(left, "/") ;True divide
-                            }
-                        case ".":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "=":
-                                    return value_binary(left, ".=") ;concat=>assign
-                                default:
-                                    return value_binary(left, ".") ;concat
-                            }
-                        case "~":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "=":
-                                    return value_binary(left, "~=") ;regex match
-                            }
-                        case "^":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "=":
-                                    return value_binary(left, "^=") ;bitwise-exclusive-or=>assign
-                                default:
-                                    return value_binary(left, "^") ;bitwise-exclusive-or
-                            }
-                        case "&":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "&":
-                                    return value_binary(left, "&&") ;logical-AND
-                                case "=":
-                                    return value_binary(left, "&=") ;Bitwise-and=>assign
-                                default:
-                                    return value_binary(left, "&") ;Bitwise-and
-                            }
-                        case "|":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "|":
-                                    return value_binary(left, "||") ;logical-OR
-                                case "=":
-                                    return value_binary(left, "|=") ;bitwise-or=>assign
-                                default:
-                                    return value_binary(left, "|") ;bitwise-or
-                            }
-                        case "<":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "<":
-                                    char3:=SubStr(str, c_ + 2, 1)
-                                    switch char3 {
-                                        case "=":
-                                            return value_binary(left, "<<=") ;Bit shift left=>assign
-                                        default:
-                                            return value_binary(left, "<<") ;Bit shift left
-                                    }
-                                case ">":
-                                    return value_binary(left, "<>") ;not-equal
-                                case "=":
-                                    return value_binary(left, "<=") ;less-or-equal
-                                default:
-                                    return value_binary(left, "<") ;less
-                            }
-                        case "!":
-                            char2:=SubStr(str, c_ + 1, 1)
-                            switch char2 {
-                                case "=":
-                                    return value_binary(left, "!=") ;not-equal
-                            }
+                    return do_operator()
+            }
+            do_operator() {
+                cBakComments:=c_
+                skip_comments()
+                bak_OutputVar_comments:=OutputVar_comments
+                char_:=SubStr(str, c_, 1)
+                switch char_ {
+                    case "+":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "+":
+                                c_+=2
+                                skip_comments()
+                                return {type:"post-unary assignment", left:left, op:"++"} ;post-increment
                             case "=":
-                                char2:=SubStr(str, c_ + 1, 1)
-                                switch char2 {
+                                return value_binary(left, "+=") ;add=>assign
+                            default:
+                                return value_binary(left, "+") ;add
+                        }
+                    case "-":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "-":
+                                c_+=2
+                                skip_comments()
+                                return {type:"post-unary assignment", left:left, op:"--"} ;post-decrement
+                            case "=":
+                                return value_binary(left, "-=") ;sub=>assign
+                            default:
+                                return value_binary(left, "-") ;sub
+                        }
+                    case "*":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "*":
+                                return value_binary(left, "**") ;power
+                            case "=":
+                                return value_binary(left, "*=") ;mul=>assign
+                            default:
+                                return value_binary(left, "*") ;mul
+                        }
+                    case "/":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "/":
+                                char3:=SubStr(str, c_ + 2, 1)
+                                switch char3 {
                                     case "=":
-                                        return value_binary(left, "==") ;case-sensitive-equal
+                                        return value_binary(left, "//=") ;Floor divide=>assign
                                     default:
-                                        return value_binary(left, "=") ;Equal
+                                        return value_binary(left, "//") ;Floor divide
+                                }
+                            case "=":
+                                return value_binary(left, "/=") ;True divide=>assign
+                            default:
+                                return value_binary(left, "/") ;True divide
+                        }
+                    case ".":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "=":
+                                return value_binary(left, ".=") ;concat=>assign
+                            default:
+                                return value_binary(left, ".") ;concat
+                        }
+                    case "~":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "=":
+                                return value_binary(left, "~=") ;regex match
+                        }
+                    case "^":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "=":
+                                return value_binary(left, "^=") ;bitwise-exclusive-or=>assign
+                            default:
+                                return value_binary(left, "^") ;bitwise-exclusive-or
+                        }
+                    case "&":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "&":
+                                return value_binary(left, "&&") ;logical-AND
+                            case "=":
+                                return value_binary(left, "&=") ;Bitwise-and=>assign
+                            default:
+                                return value_binary(left, "&") ;Bitwise-and
+                        }
+                    case "|":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "|":
+                                return value_binary(left, "||") ;logical-OR
+                            case "=":
+                                return value_binary(left, "|=") ;bitwise-or=>assign
+                            default:
+                                return value_binary(left, "|") ;bitwise-or
+                        }
+                    case "<":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "<":
+                                char3:=SubStr(str, c_ + 2, 1)
+                                switch char3 {
+                                    case "=":
+                                        return value_binary(left, "<<=") ;Bit shift left=>assign
+                                    default:
+                                        return value_binary(left, "<<") ;Bit shift left
                                 }
                             case ">":
-                                char2:=SubStr(str, c_ + 1, 1)
-                                switch char2 {
-                                    case ">":
-                                        char3:=SubStr(str, c_ + 2, 1)
-                                        switch char3 {
-                                            case "=":
-                                                return value_binary(left, ">>=") ;Bit shift right=>assign
-                                            default:
-                                                return value_binary(left, ">>") ;Bit shift right
-                                        }
-                                    case "=":
-                                        return value_binary(left, ">=") ;greater-or-equal
-                                    default:
-                                        return value_binary(left, ">") ;greater
-                                }
-                        case "?":
-                            c_++
-                            skip_comments()
-
-                            right:=value_expression()
-                            if (backtrack_for_hotkey) {
-                                if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
-                                    c1:=cBakComments + pos
-                                    backtrack_for_hotkey:=0
-                                    return left
-                                }
-                            }
-
-                            char_:=SubStr(str, c_, 1)
-                            if (char_==":") {
-                                c_++
-                                skip_comments()
-                                ifFalse:=value_expression()
-                                if (backtrack_for_hotkey) {
-                                    if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
-                                        c1:=cBakComments + pos
-                                        backtrack_for_hotkey:=0
-                                        return left
-                                    }
-                                }
-                                return {type:"ternary",condition:left,ifTrue:right,ifFalse:ifFalse}
-                            } else {
-                                MsgBox "You Need a : to your ?"
-                            }
-                        case ":":
+                                return value_binary(left, "<>") ;not-equal
+                            case "=":
+                                return value_binary(left, "<=") ;less-or-equal
+                            default:
+                                return value_binary(left, "<") ;less
+                        }
+                    case "!":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case "=":
+                                return value_binary(left, "!=") ;not-equal
+                        }
+                        case "=":
                             char2:=SubStr(str, c_ + 1, 1)
                             switch char2 {
-                                case ":":
-                                    aHotkeyWasFound:=backtrack_for_hotkey:=c_ + 2
-                                    return ""
                                 case "=":
-                                    return value_binary(left, ":=") ;Assign
+                                    return value_binary(left, "==") ;case-sensitive-equal
                                 default:
-                                    return left ;ternary-colon, taken care of by "?"
+                                    return value_binary(left, "=") ;Equal
                             }
-                        case "``":
-                            colonPos:=InStr(str, "::", true, c_ + 1)
-                            if (colonPos) {
-                                aHotkeyWasFound:=backtrack_for_hotkey:=colonPos + 2
+                        case ">":
+                            char2:=SubStr(str, c_ + 1, 1)
+                            switch char2 {
+                                case ">":
+                                    char3:=SubStr(str, c_ + 2, 1)
+                                    switch char3 {
+                                        case "=":
+                                            return value_binary(left, ">>=") ;Bit shift right=>assign
+                                        default:
+                                            return value_binary(left, ">>") ;Bit shift right
+                                    }
+                                case "=":
+                                    return value_binary(left, ">=") ;greater-or-equal
+                                default:
+                                    return value_binary(left, ">") ;greater
                             }
-                            return ""
-                        case ",", "", "{", "}", ")":
-                            return left
-                        case "a":
-                            word_:=SubStr(str, c_, 3)
-                            if (word_="and") {
-                                c_+=3
-                                skip_comments() ;assuming not newline word
-                                return {type: "binary", op: "and", left:left, right: value_expression()}
-                            }
-                        case "o":
-                            word_:=SubStr(str, c_, 2)
-                            if (word_="or") {
-                                c_+=2
-                                skip_comments() ;assuming not newline word
-                                return {type: "binary", op: "or", left:left, right: value_expression()}
-                            }
-                    }
-                    if (OutputVar_comments.0=="" && left.type!=="string") {
-                        return left
-                    } else if (InStr(OutputVar_comments.0, "`n", true)) {
-                        return left
-                    } else {
-                        ;new IObjectArray() -> IObjectArray()
-                        if (left.type == "variable" && left.value = "new") {
-                            return value_expression()
-                        }
-                        return {type: "concat", op: OutputVar_comments.0, left:left, right: value_expression()}
-                    }
-                    value_binary(left, op) {
-                        c_+=StrLen(op)
+                    case "?":
+                        c_++
                         skip_comments()
 
                         right:=value_expression()
@@ -1479,13 +1428,87 @@ AHK_parse(str) {
                                 return left
                             }
                         }
-                        if (right.type == "binary" && orderOfOperations[right.op] > orderOfOperations[op]) {
-                            left:={type:"binary", op:op, left: left, right:right.left}
-                            op:=right.op
-                            right:=right.right
+
+                        char_:=SubStr(str, c_, 1)
+                        if (char_==":") {
+                            c_++
+                            skip_comments()
+                            ifFalse:=value_expression()
+                            if (backtrack_for_hotkey) {
+                                if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
+                                    c1:=cBakComments + pos
+                                    backtrack_for_hotkey:=0
+                                    return left
+                                }
+                            }
+                            return {type:"ternary",condition:left,ifTrue:right,ifFalse:ifFalse}
+                        } else {
+                            MsgBox "You Need a : to your ?"
                         }
-                        return {type: "binary", op: op, left:left, right: right}
+                    case ":":
+                        char2:=SubStr(str, c_ + 1, 1)
+                        switch char2 {
+                            case ":":
+                                aHotkeyWasFound:=backtrack_for_hotkey:=c_ + 2
+                                return ""
+                            case "=":
+                                return value_binary(left, ":=") ;Assign
+                            default:
+                                return left ;ternary-colon, taken care of by "?"
+                        }
+                    case "``":
+                        colonPos:=InStr(str, "::", true, c_ + 1)
+                        if (colonPos) {
+                            aHotkeyWasFound:=backtrack_for_hotkey:=colonPos + 2
+                        }
+                        return ""
+                    case ",", "", "{", "}", ")":
+                        return left
+                    case "a":
+                        word_:=SubStr(str, c_, 3)
+                        if (word_="and") {
+                            c_+=3
+                            skip_comments() ;assuming not newline word
+                            return {type: "binary", op: "and", left:left, right: value_expression()}
+                        }
+                    case "o":
+                        word_:=SubStr(str, c_, 2)
+                        if (word_="or") {
+                            c_+=2
+                            skip_comments() ;assuming not newline word
+                            return {type: "binary", op: "or", left:left, right: value_expression()}
+                        }
+                }
+                if (OutputVar_comments.0=="" && left.type!=="string") {
+                    return left
+                } else if (InStr(OutputVar_comments.0, "`n", true)) {
+                    return left
+                } else {
+                    ;new IObjectArray() -> IObjectArray()
+                    if (left.type == "variable" && left.value = "new") {
+                        return value_expression()
                     }
+                    return {type: "concat", op: OutputVar_comments.0, left:left, right: value_expression()}
+                }
+                value_binary(left, op) {
+                    c_+=StrLen(op)
+                    skip_comments()
+
+                    right:=value_expression()
+                    if (backtrack_for_hotkey) {
+                        if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
+                            c1:=cBakComments + pos
+                            backtrack_for_hotkey:=0
+                            return left
+                        }
+                    }
+                    if (right.type == "binary" && orderOfOperations[right.op] > orderOfOperations[op]) {
+                        left:={type:"binary", op:op, left: left, right:right.left}
+                        op:=right.op
+                        right:=right.right
+                    }
+                    return {type: "binary", op: op, left:left, right: right}
+                }
 
             }
         }
@@ -2192,7 +2215,7 @@ walker_replacer() {
                 return t_
             }
             switch t_.type {
-                case "command empty arg":
+                case "command empty arg", "function call empty arg":
                     return ""
                 case "variable":
                     switch (t_.value), 0 {
@@ -2398,12 +2421,33 @@ walker_replacer() {
                                         currentScope[obj.left.value]:="WinGetList Array"
                                         currentScope[obj.left.value "%A_Index%"]:="WinGetList Element"
                                     }
+                                case "InStr":
+                                    if (t_.args.Length >= 3 && t_.args[3].type == "function call empty arg") {
+                                        t_.args[3]:={type:"variable", value:"false"}
+                                    }
                             }
                         case "property access":
                             switch t_.func.propName, 0 {
                                 case "ReadLine":
                                     if (obj.type == "binary") {
                                         currentScope[obj.left.value]:="ReadLine Line"
+                                    }
+                                case "Length":
+                                    replacement:=t_.func
+                                    if (Type(obj) == "Object") {
+                                        obj.%key%:=replacement
+                                    } else {
+                                        obj[key]:=replacement
+                                    }
+                                case "SetCapacity":
+                                    if (t_.args.Length > 1) {
+                                        MsgBox "could this be ``Object.SetCapacity(Key, ByteSize)`` ?"
+                                    }
+                                    replacement:={left:{type: "property access", parent: t_.func.parent, propName: "Capacity"}, op:":=", right:t_.args[1], type:"binary"}
+                                    if (Type(obj) == "Object") {
+                                        obj.%key%:=replacement
+                                    } else {
+                                        obj[key]:=replacement
                                     }
 
                             }
@@ -2985,7 +3029,7 @@ what() {
                 return t_
             }
             switch t_.type {
-                case "command empty arg":
+                case "command empty arg", "function call empty arg":
                     return ""
                 case "variable", "directive arg", "number", "hex number", "obj key", "double-deref":
                     return t_.value
