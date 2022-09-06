@@ -2141,6 +2141,32 @@ walker_replacer() {
                     indent:=SubStr(indent, 3)
                     finalStr.=indent
                     finalStr.="} "
+                case "class":
+                    finalStr.="class " v_.className " "
+                    v_:=statements[++k_]
+
+                    isStatic:=true
+                    for possiblyFunc in v_.statements {
+                        if (possiblyFunc.type == "function definition") {
+                            switch (possiblyFunc.func.value), 0 {
+                                case "__New", "__Delete":
+                                    isStatic:=false
+                                    break
+                            }
+                        }
+                    }
+                    if (isStatic) {
+                        class_statements_len:=v_.statements.Length
+                        class_statements_idx:=class_statements_len
+                        while (class_statements_idx > 0) {
+                            possiblyFunc:=v_.statements[class_statements_idx]
+                            if (possiblyFunc.type == "function definition") {
+                                v_.statements.InsertAt(class_statements_idx, {type:"var scope declaration", value: "static"})
+                            }
+                            class_statements_idx--
+                        }
+                    }
+                    withNewline()
                 case "function definition":
                     finalStr.=do(statements, k_) " "
 
