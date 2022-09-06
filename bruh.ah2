@@ -49,7 +49,12 @@ AHK_parse(str) {
                     switch currentArr[currentArr.Length].type {
                         case "function call":
                             currentArr[currentArr.Length].type:="function definition"
-                    }
+                            currentArr[currentArr.Length].body:={type:"block", statements:statements:=[]}
+                            arrArr.Push(currentArr)
+                            currentArr:=statements
+                            skip_comments()
+                            continue statements_loop
+                        }
                 }
                 arrArr.Push(currentArr)
                 currentArr.Push({type:"block", statements:statements:=[]})
@@ -567,9 +572,12 @@ AHK_parse(str) {
                     boolArr:=[2,2,2,1]
                 case "local", "global", "static":
                     currentArr.Push({type:"var scope declaration", value: StrLower(OutputVar_varName.0)})
+                    currentArrBak:=currentArr
                     toPush:=value_expression()
                     if (toPush) {
-                        currentArr.Push({type:"first var scope", value:toPush})
+                        currentArrBak.Push(toPush)
+                    } else {
+                        MsgBox "var scope declaration but without expression??"
                     }
                     return
                 case "while":
@@ -990,6 +998,7 @@ AHK_parse(str) {
     }
 
     skip_expression() {
+        currentArrBak:=currentArr
         toPush:=value_expression()
         if (aHotkeyWasFound) {
             if (backtrack_for_hotkey) {
@@ -1000,11 +1009,11 @@ AHK_parse(str) {
                 c_:=aHotkeyWasFound
                 aHotkeyWasFound:=0
                 add_hotkey()
-                currentArr.Push(toPush)
+                currentArrBak.Push(toPush)
             }
             ; hotkey
         } else {
-            currentArr.Push(toPush)
+            currentArrBak.Push(toPush)
         }
     }
 
@@ -1603,7 +1612,7 @@ string_to_variable_or_prop(str) {
 ; AHK_parse("if(true){}else{}")
 ; AHK_parse(FileRead("switch.ahk"))
 ; AHK_parse(FileRead("switch2.ahk"))
-; AHK_parse(FileRead("_VD.ahk"))
+AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; AHK_parse("[::MsgBox hello")
 ; AHK_parse("* & a::MsgBox hello")
@@ -1616,7 +1625,7 @@ string_to_variable_or_prop(str) {
 ; AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
 ; AHK_parse(":::MsgBox hello")
 ; AHK_parse("Enter::MsgBox hello")
-AHK_parse(A_Clipboard)
+; AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
@@ -1698,6 +1707,7 @@ walker_superGlobalVars() {
                 case "var scope declaration":
                     finalStr.=v_.value
                     v_:=statements[++k_]
+                    withNewline()
                 case "block":
                     finalStr.="{`n"
                     indent.="  "
@@ -1717,7 +1727,8 @@ walker_superGlobalVars() {
                         superGlobalVarsMap[v_.func.value]:=v_.func.value
                     }
                     finalStr.=do(v_) " "
-                    v_:=statements[++k_]
+                    v_:=v_.body
+                    withNewline()
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
                 case "if with block":
@@ -1902,9 +1913,8 @@ walker_globalVars() {
                 , "comma multi-statement":
                     finalStr.=do(v_) "`n"
                 case "var scope declaration":
-                    finalStr.=v_.value
+                    finalStr.=v_.value " "
                     v_:=statements[++k_]
-                    finalStr.=" "
                     withNewline()
                 case "block":
                     finalStr.="{`n"
@@ -1922,7 +1932,8 @@ walker_globalVars() {
                     finalStr.="} "
                 case "function definition":
                     finalStr.=do(v_) " "
-                    v_:=statements[++k_]
+                    v_:=v_.body
+                    withNewline()
                     if (indent=="") {
                         globalFunctionIndices.Push(k_)
                     }
@@ -2113,9 +2124,9 @@ walker_replacer() {
                 , "comma multi-statement", "concat":
                     finalStr.=do(statements, k_) "`n"
                 case "var scope declaration":
-                    finalStr.=v_.value
+                    finalStr.=v_.value " "
                     v_:=statements[++k_]
-                    finalStr.=" " do(statements, k_) "`n"
+                    withNewline()
                 case "block":
                     finalStr.="{`n"
                     indent.="  "
@@ -2137,7 +2148,7 @@ walker_replacer() {
                     currentScope.CaseSense:="Off"
                     functionScopes.Push(currentScope)
 
-                    v_:=statements[++k_]
+                    v_:=v_.body
                     withNewline()
 
                     currentScope:=functionScopes.Pop()
@@ -2521,7 +2532,7 @@ walker_undefinedVars() {
     takesIndices(globalFunctionIndices, currentArr)
     takesIndices(notCurrentIndices, notCurrentArr) {
         for i_ in notCurrentIndices {
-            blockObj:=notCurrentArr[i_]
+            blockObj:=notCurrentArr[i_].body
             _currentIndices:=[]
 
             currentScope:=Map()
@@ -2529,7 +2540,7 @@ walker_undefinedVars() {
             functionScopes.Push(currentScope)
 
             ;parameters are also declared variables
-            for param in notCurrentArr[i_-1].args {
+            for param in notCurrentArr[i_].args {
                 switch param.type {
                     case "variable":
                         currentScope[param.value]:=param.value
@@ -2543,7 +2554,7 @@ walker_undefinedVars() {
 
             for k_, v_ in blockObj.statements {
                 if (v_.type=="function definition") {
-                    _currentIndices.Push(k_+1)
+                    _currentIndices.Push(k_)
                     if (v_.func.type=="variable") {
                         currentScope[v_.func.value]:=v_.func.value
                     }
@@ -2633,7 +2644,8 @@ walker_undefinedVars() {
                     finalStr.="} "
                 case "function definition":
                     finalStr.=do(statements, k_) " "
-                    v_:=statements[++k_]
+                    v_:=v_.body
+                    withNewline()
                 case "condition with block":
                     finalStr.=do(v_, "expr") " "
                 case "if with block":
@@ -2841,9 +2853,9 @@ what() {
                 , "comma multi-statement", "concat":
                     finalStr.=do(v_) "`n"
                 case "var scope declaration":
-                    finalStr.=v_.value
+                    finalStr.=v_.value " "
                     v_:=statements[++k_]
-                    finalStr.=" " do(v_) "`n"
+                    withNewline()
                 case "block":
                     finalStr.="{`n"
                     indent.="  "
@@ -2866,7 +2878,7 @@ what() {
                     withNewline()
                 case "function definition":
                     finalStr.=do(v_) " "
-                    v_:=statements[++k_]
+                    v_:=v_.body
                     withNewline()
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
