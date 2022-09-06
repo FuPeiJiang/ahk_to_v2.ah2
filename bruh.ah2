@@ -717,6 +717,10 @@ AHK_parse(str) {
                     boolArr:=[0,1,1,1,1,1]
                 case "Sort":
                     boolArr:=[0,3]
+                case "PostMessage":
+                    boolArr:=[0,0,0,2,2,2,2,3]
+                case "SendMessage":
+                    boolArr:=[0,0,0,2,2,2,2,2,0]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -831,7 +835,7 @@ AHK_parse(str) {
                             }
                         }
                 }
-                add_command(OutputVar_varName.0, argsArr)
+                add_command("MsgBox", argsArr)
             case "PixelGetColor":
                 if (argsArr.Length>=4) {
                     argsArr[4]:=RegExReplace(argsArr[4], "(?i) *RGB *")
@@ -1612,7 +1616,7 @@ string_to_variable_or_prop(str) {
 ; AHK_parse("if(true){}else{}")
 ; AHK_parse(FileRead("switch.ahk"))
 ; AHK_parse(FileRead("switch2.ahk"))
-AHK_parse(FileRead("_VD.ahk"))
+; AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; AHK_parse("[::MsgBox hello")
 ; AHK_parse("* & a::MsgBox hello")
@@ -1625,6 +1629,7 @@ AHK_parse(FileRead("_VD.ahk"))
 ; AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
 ; AHK_parse(":::MsgBox hello")
 ; AHK_parse("Enter::MsgBox hello")
+AHK_parse('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
 ; AHK_parse(A_Clipboard)
 
 
