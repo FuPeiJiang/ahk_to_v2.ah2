@@ -646,7 +646,8 @@ AHK_parse(str) {
                         currentArr.Push({type: "condition without block", expr: toPush})
                     }
                     return
-                case "WinActivate", "WinHide":
+                case "WinActivate", "WinHide"
+                ,"Gui":
                     boolArr:=[2,2,2,3]
                 case "WinGetTitle", "WinGetClass":
                     boolArr:=[0,2,2,2,3]
@@ -1629,7 +1630,8 @@ string_to_variable_or_prop(str) {
 ; AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
 ; AHK_parse(":::MsgBox hello")
 ; AHK_parse("Enter::MsgBox hello")
-AHK_parse('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
+; AHK_parse('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
+AHK_parse(FileRead("gui.ahk"))
 ; AHK_parse(A_Clipboard)
 
 
@@ -2112,6 +2114,57 @@ walker_replacer() {
         withNewline() {
             switch v_.type {
                 case "command":
+                    switch (v_._name), 0 {
+                        case "Gui":
+                            if (!currentScope.Has("myGui")) {
+                                currentScope["myGui"]:="myGui"
+                                v_:={left:{type:"variable", value:"myGui"}, op:":=", right:{args:[], func:{type:"variable", value:"Gui"}, type:"function call"}, type:"binary"}
+                                statements.InsertAt(k_, v_)
+                                withNewline()
+                                k_++, statements_len++
+                                v_:=statements[k_]
+                            }
+                            argsArr:=v_.args
+                            switch (argsArr.RemoveAt(1).value), 0 {
+                                case "New":
+                                case "Add":
+                                    if (argsArr[2].type == "string") {
+                                        RegExMatch(argsArr[2].value, "\s*\S*hwnd(\S*)", &OutputVar_hwnd)
+                                        if (OutputVar_hwnd) {
+                                            argsArr[2].value:=SubStr(argsArr[2].value, 1, OutputVar_hwnd.Pos - 1) SubStr(argsArr[2].value, OutputVar_hwnd.Pos + OutputVar_hwnd.Len)
+                                            v_:=statements[k_]:={left:{type:"variable", value:OutputVar_hwnd.1}, op:":=", right:{args:argsArr, func:{parent:{type:"variable", value:"myGui"}, propName:"Add", type:"property access"}, type:"function call"}, type:"binary"}
+                                            withNewline()
+                                            currentScope[OutputVar_hwnd.1]:="Gui Control Hwnd"
+                                            return
+                                        }
+                                    }
+                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:"myGui"}, propName:"Add", type:"property access"}, type:"function call"}
+                                    withNewline()
+                                case "Show":
+                                    if (argsArr.Length == 2) {
+                                        v_:={left:{parent:{type:"variable", value:"myGui"}, propName:"Title", type:"property access"}, op:":=", right:argsArr.Pop(), type:"binary"}
+                                        statements.InsertAt(k_, v_)
+                                        withNewline()
+                                        k_++, statements_len++
+                                    }
+                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:"myGui"}, propName:"Show", type:"property access"}, type:"function call"}
+                                    withNewline()
+                                case "Submit":
+                                case "Cancel":
+                                case "Destroy":
+                                case "Font":
+                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:"myGui"}, propName:"SetFont", type:"property access"}, type:"function call"}
+                                    withNewline()
+                                case "Color":
+                                case "Margin":
+                                case "Options":
+                                case "Menu":
+                                case "Minimize":
+                                case "Flash":
+                                case "Default":
+                            }
+                            return
+                    }
                     if (v_.args.Length) {
                         finalStr.=v_._name " " do(v_.args, 1)
                         i_:=2, len:=v_.args.Length + 1
@@ -2298,6 +2351,14 @@ walker_replacer() {
                                             } else {
                                                 obj[key]:=replacement
                                             }
+                                        case "Gui Control Hwnd":
+                                            ; HWndExplanation_Edit -> HWndExplanation_Edit.Hwnd
+                                            replacement:={type: "property access", parent: t_, propName: "Hwnd"}
+                                            if (Type(obj) == "Object") {
+                                                obj.%key%:=replacement
+                                            } else {
+                                                obj[key]:=replacement
+                                            }
                                     }
                                     break
                                 }
@@ -2367,7 +2428,7 @@ walker_replacer() {
                     if (t_.op == ":=") {
                         switch t_.right.type {
                             case "string", "concat":
-                                currentScope[t_.left.value]:="string so StrPtr"
+                                currentScope[do(t_, "left")]:="string so StrPtr"
                             ; SubStr too
                         }
                     }
