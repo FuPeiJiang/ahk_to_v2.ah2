@@ -722,6 +722,8 @@ AHK_parse(str) {
                     boolArr:=[0,0,0,2,2,2,2,3]
                 case "SendMessage":
                     boolArr:=[0,0,0,2,2,2,2,2,0]
+                case "IfEqual","IfNotEqual","IfLess","IfLessOrEqual","IfGreater","IfGreaterOrEqual":
+                    boolArr:=[0,2]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -748,6 +750,9 @@ AHK_parse(str) {
                                 if (InStr(OutputVar_comments.0, "`n", true)) {
                                     break
                                 }
+                                if (argNum == boolArr.Length) {
+                                    break
+                                }
                             } else {
                                 ; v1str MsgBox %var%
                                 if (argNum == boolArr.Length) {
@@ -760,6 +765,9 @@ AHK_parse(str) {
                                     toPush:=v1str_to_expression(out_v1str)
                                     OutputVar_comments:=OutputVar_comments_bak ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                                     if (InStr(OutputVar_comments.0, "`n", true)) {
+                                        break
+                                    }
+                                    if (argNum == boolArr.Length) {
                                         break
                                     }
                                 }
@@ -931,6 +939,19 @@ AHK_parse(str) {
             case "Sort":
                 currentArr.Push({type: "binary", op: ":=", left:argsArr[1], right: {type: "function call", func: {type:"variable"
                 , value:"Sort"}, args: argsArr}})
+            case "IfEqual","IfNotEqual","IfLess","IfLessOrEqual","IfGreater","IfGreaterOrEqual":
+                char3:=SubStr(str, c_, 1)
+                switch char3 {
+                    case ",":
+                        add_command(OutputVar_varName.0, argsArr)
+                        c_++
+                        skip_comments()
+                    case "{":
+                        MsgBox "not implemented: block after IfEqual"
+                    default:
+                        MsgBox "not implemented: very unknown after IfEqual"
+                }
+
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -1632,7 +1653,11 @@ string_to_variable_or_prop(str) {
 ; AHK_parse("Enter::MsgBox hello")
 ; AHK_parse('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
 ; AHK_parse(FileRead("gui.ahk"))
-AHK_parse(A_Clipboard)
+AHK_parse(FileRead("IfEqual.ahk"))
+; AHK_parse("IfEqual, Member, InterfaceLuid,               Return this.NET_LUID()")
+; AHK_parse("IfEqual, Member, % ComObjCreate(),               Return this.NET_LUID()")
+; AHK_parse(A_Clipboard)
+
 
 
 superGlobalVarsMap:=Map()
@@ -2164,6 +2189,31 @@ walker_replacer() {
                                 case "Default":
                             }
                             return
+                        case "IfEqual","IfNotEqual","IfLess","IfLessOrEqual","IfGreater","IfGreaterOrEqual":
+                            next:=statements[k_ + 1]
+                            if (next.type == "command") {
+                                statements[k_] := {type:"if without block"}
+                                k_++
+                                do(v_.args, 2) ;if there's a Line from File.ReadLine() -> Line "`n"
+                                switch (v_._name), 0 {
+                                    case "IfEqual":
+                                        op:="=="
+                                    case "IfNotEqual":
+                                        op:="!=="
+                                    case "IfLess":
+                                        op:="<"
+                                    case "IfLessOrEqual":
+                                        op:="<="
+                                    case "IfGreater":
+                                        op:=">"
+                                    case "IfGreaterOrEqual":
+                                        op:=">="
+                                }
+                                statements.InsertAt(k_, {type:"group",value:{type:"binary",op:op,left:v_.args[1],right:v_.args[2]}})
+                                k_++, statements_len++
+                                v_:=statements[k_]
+                                return
+                            }
                     }
                     if (v_.args.Length) {
                         finalStr.=v_._name " " do(v_.args, 1)
