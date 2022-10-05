@@ -1631,8 +1631,8 @@ string_to_variable_or_prop(str) {
 ; AHK_parse(":::MsgBox hello")
 ; AHK_parse("Enter::MsgBox hello")
 ; AHK_parse('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
-AHK_parse(FileRead("gui.ahk"))
-; AHK_parse(A_Clipboard)
+; AHK_parse(FileRead("gui.ahk"))
+AHK_parse(A_Clipboard)
 
 
 superGlobalVarsMap:=Map()
@@ -2544,15 +2544,31 @@ walker_replacer() {
                                     }
                                 case "SetCapacity":
                                     if (t_.args.Length > 1) {
-                                        MsgBox "could this be ``Object.SetCapacity(Key, ByteSize)`` ?"
+                                        ; Object.SetCapacity(Key, ByteSize)
+                                        ; `this.SetCapacity("a",7)` -> `this.a := Buffer(7)`
+                                        replacement:={left:{type: "property access", parent: t_.func.parent, propName: t_.args[1].value}, op:":=", right:{args:[t_.args[2]], func:{type:"variable", value:"Buffer"}, type:"function call"}, type:"binary"}
+                                        if (Type(obj) == "Object") {
+                                            obj.%key%:=replacement
+                                        } else {
+                                            obj[key]:=replacement
+                                        }
+                                    } else {
+                                        replacement:={left:{type: "property access", parent: t_.func.parent, propName: "Capacity"}, op:":=", right:t_.args[1], type:"binary"}
+                                        if (Type(obj) == "Object") {
+                                            obj.%key%:=replacement
+                                        } else {
+                                            obj[key]:=replacement
+                                        }
                                     }
-                                    replacement:={left:{type: "property access", parent: t_.func.parent, propName: "Capacity"}, op:":=", right:t_.args[1], type:"binary"}
+                                case "GetAddress":
+                                    ; Ptr := Object.GetAddress(Key)
+                                    ; `this.GetAddress("a")` -> `this.a.Ptr`
+                                    replacement:={type: "property access", parent: {type: "property access", parent: t_.func.parent, propName: t_.args[1].value}, propName: "Ptr"}
                                     if (Type(obj) == "Object") {
                                         obj.%key%:=replacement
                                     } else {
                                         obj[key]:=replacement
                                     }
-
                             }
                     }
                     argsStr:=""
