@@ -1656,7 +1656,8 @@ string_to_variable_or_prop(str) {
 ; AHK_parse(FileRead("IfEqual.ahk"))
 ; AHK_parse("IfEqual, Member, InterfaceLuid,               Return this.NET_LUID()")
 ; AHK_parse("IfEqual, Member, % ComObjCreate(),               Return this.NET_LUID()")
-AHK_parse(FileRead("reservedVar.ahk"))
+; AHK_parse(FileRead("reservedVar.ahk"))
+AHK_parse(FileRead("reservedVar2.ahk"))
 ; AHK_parse(A_Clipboard)
 
 
@@ -2283,11 +2284,11 @@ walker_replacer() {
                     }
                     withNewline()
                 case "function definition":
-                    finalStr.=do(statements, k_) " "
-
                     currentScope:=Map()
                     currentScope.CaseSense:="Off"
                     functionScopes.Push(currentScope)
+
+                    finalStr.=do(statements, k_) " "
 
                     v_:=v_.body
                     withNewline()
