@@ -1653,9 +1653,10 @@ string_to_variable_or_prop(str) {
 ; AHK_parse("Enter::MsgBox hello")
 ; AHK_parse('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
 ; AHK_parse(FileRead("gui.ahk"))
-AHK_parse(FileRead("IfEqual.ahk"))
+; AHK_parse(FileRead("IfEqual.ahk"))
 ; AHK_parse("IfEqual, Member, InterfaceLuid,               Return this.NET_LUID()")
 ; AHK_parse("IfEqual, Member, % ComObjCreate(),               Return this.NET_LUID()")
+AHK_parse(FileRead("reservedVar.ahk"))
 ; AHK_parse(A_Clipboard)
 
 
@@ -2113,6 +2114,12 @@ for k_ in globalVarsMap {
 }
 ; d globalVarsArr
 
+reservedVars := Map()
+reservedVars.CaseSense := "Off"
+reservedVars.Set(
+    "in", "in_"
+)
+
 walker_replacer() {
     global superGlobalVarsMap
     finalStr:=""
@@ -2409,12 +2416,38 @@ walker_replacer() {
                                             } else {
                                                 obj[key]:=replacement
                                             }
+                                        default:
+                                            if (reservedVars.Has(t_.value)) {
+                                                maybeAlready:=_scope[t_.value]
+                                                if (Type(maybeAlready) == "Object" && maybeAlready.type == "rename") {
+                                                    t_.value := maybeAlready.value
+                                                    break
+                                                }
+
+                                                replaceWith_:=defaultReplaceWith:=reservedVars[t_.value]
+                                                iterator:=2
+                                                ; doesn't take care of "future" variables...
+                                                outer2:
+                                                loop {
+                                                    for _scope in functionScopes {
+                                                        if (_scope.Has(replaceWith_)) {
+                                                            replaceWith_:=defaultReplaceWith iterator
+                                                            iterator++
+                                                            continue outer2
+                                                        }
+                                                    }
+                                                    ; it's fine, we can use this name
+                                                    _scope[t_.value] := {type:"rename",value:replaceWith_} ;redirect to renamed
+                                                    t_.value := replaceWith_
+                                                    break outer2
+                                                }
+                                            }
                                     }
                                     break
                                 }
                             }
                     }
-                    return
+                    return t_.value
                 case "directive arg", "number", "hex number", "obj key", "double-deref":
                     return t_.value
                 case "string":
@@ -2479,6 +2512,8 @@ walker_replacer() {
                         switch t_.right.type {
                             case "string", "concat":
                                 currentScope[do(t_, "left")]:="string so StrPtr"
+                            default:
+                                currentScope[do(t_, "left")]:="simply defined"
                             ; SubStr too
                         }
                     }
