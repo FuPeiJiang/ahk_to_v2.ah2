@@ -2750,6 +2750,10 @@ walker_undefinedVars() {
                     indent:=SubStr(indent, 3)
                     finalStr.=indent
                     finalStr.="} "
+                case "class":
+                    currentScope["this"]:="this" ;`this` isn't global, but should be defined in `class`
+                    ; this:=3
+                    ; MsgBox % this ;3
                 case "function definition":
                     finalStr.=do(statements, k_) " "
                     v_:=v_.body
