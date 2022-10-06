@@ -1659,7 +1659,7 @@ string_to_variable_or_prop(str) {
 ; AHK_parse(FileRead("reservedVar.ahk"))
 ; AHK_parse(FileRead("reservedVar2.ahk"))
 ; AHK_parse(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
-AHK_parse("DllCall(`"gdiplus\GdipCreateFromHDC`", A_PtrSize ? `"UPtr`" : `"UInt`", 0)")
+AHK_parse(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
 ; AHK_parse(A_Clipboard)
 
 
@@ -2570,14 +2570,23 @@ walker_replacer() {
                     return do(t_, "left") ", " do(t_, "right")
                 case "ternary":
                     ; A_PtrSize ? "UPtr" : "UInt" -> "Ptr"
-                    if (t_.condition.type == "variable" && t_.condition.value = "A_PtrSize"
-                    && t_.ifTrue.type == "string" && t_.ifTrue.value = "UPtr"
-                    && t_.ifFalse.type == "string" && t_.ifFalse.value = "UInt") {
-                        replacement:={type:"string",value:"Ptr"}
-                        if (Type(obj) == "Object") {
-                            obj.%key%:=replacement
-                        } else {
-                            obj[key]:=replacement
+                    ; A_PtrSize ? "UPtr*" : "UInt*" -> "Ptr*"
+                    loop 1 {
+                        if (t_.condition.type == "variable" && t_.condition.value = "A_PtrSize"
+                        && t_.ifTrue.type == "string" && t_.ifFalse.type == "string") {
+                            if (t_.ifTrue.value = "UPtr" && t_.ifFalse.value = "UInt") {
+                                replacement:={type:"string",value:"Ptr"}
+                            } else if ((t_.ifTrue.value = "UPtr*" || t_.ifTrue.value = "UPtrP")
+                            && (t_.ifFalse.value = "UInt*" || t_.ifFalse.value = "UIntP")) {
+                                replacement:={type:"string",value:"Ptr*"}
+                            } else {
+                                break
+                            }
+                            if (Type(obj) == "Object") {
+                                obj.%key%:=replacement
+                            } else {
+                                obj[key]:=replacement
+                            }
                         }
                     }
                     return do(t_, "condition") " ? " do(t_, "ifTrue") " : " do(t_, "ifFalse")
