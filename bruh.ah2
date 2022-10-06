@@ -1657,7 +1657,8 @@ string_to_variable_or_prop(str) {
 ; AHK_parse("IfEqual, Member, InterfaceLuid,               Return this.NET_LUID()")
 ; AHK_parse("IfEqual, Member, % ComObjCreate(),               Return this.NET_LUID()")
 ; AHK_parse(FileRead("reservedVar.ahk"))
-AHK_parse(FileRead("reservedVar2.ahk"))
+; AHK_parse(FileRead("reservedVar2.ahk"))
+AHK_parse(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
 ; AHK_parse(A_Clipboard)
 
 
@@ -1742,6 +1743,8 @@ walker_superGlobalVars() {
                     finalStr.=v_.value
                     v_:=statements[++k_]
                     withNewline()
+                case "class":
+                    v_:=statements[++k_]
                 case "block":
                     finalStr.="{`n"
                     indent.="  "
@@ -2129,6 +2132,7 @@ walker_replacer() {
     currentScope:=Map()
     currentScope.CaseSense:="Off"
     functionScopes:=[superGlobalVarsMap, currentScope]
+    functionScopeNames:=["superGlobal", "normalGlobal"]
 
     do_statements(currentArr)
     return finalStr
@@ -2259,15 +2263,32 @@ walker_replacer() {
                     finalStr.="} "
                 case "class":
                     finalStr.="class " v_.className " "
+                    currentScope:=Map()
+                    currentScope.CaseSense:="Off"
+                    functionScopes.Push(currentScope)
+                    functionScopeNames.Push(v_.className)
+
                     v_:=statements[++k_]
 
                     isStatic:=true
                     for possiblyFunc in v_.statements {
                         if (possiblyFunc.type == "function definition") {
+                            currentScope[possiblyFunc.func.value] := "function inside class"
                             switch (possiblyFunc.func.value), 0 {
                                 case "__New", "__Delete":
                                     isStatic:=false
-                                    break
+                                    ; break ;do not break because `__Get`
+                                case "__Get", "__Call":
+                                    ; `__Get(a)` -> `__Set(a, Params)`
+                                    ; `__Call(a)` -> `__Call(a, Params)`
+                                    if (possiblyFunc.args.Length == 1) {
+                                        possiblyFunc.args.Push({type:"variable",value:"Params"})
+                                    }
+                                case "__Set":
+                                    ; `__Set(a, b)` -> `__Set(a, Params, b)`
+                                    if (possiblyFunc.args.Length == 2) {
+                                        possiblyFunc.args.InsertAt(2, {type:"variable",value:"Params"})
+                                    }
                             }
                         }
                     }
@@ -2283,16 +2304,21 @@ walker_replacer() {
                         }
                     }
                     withNewline()
+
+                    functionScopeNames.Pop()
+                    currentScope:=functionScopes.Pop()
                 case "function definition":
                     currentScope:=Map()
                     currentScope.CaseSense:="Off"
                     functionScopes.Push(currentScope)
+                    functionScopeNames.Push(v_.func.value)
 
                     finalStr.=do(statements, k_) " "
 
                     v_:=v_.body
                     withNewline()
 
+                    functionScopeNames.Pop()
                     currentScope:=functionScopes.Pop()
                 case "condition with block":
                     finalStr.=do(v_, "expr") " "
@@ -2517,6 +2543,26 @@ walker_replacer() {
                                 currentScope[do(t_, "left")]:="simply defined"
                             ; SubStr too
                         }
+                        switch t_.left.type {
+                            case "property access":
+                                if (t_.left.parent.type == "variable" && t_.left.parent.value = "this") {
+                                    s_ := functionScopeNames.Length
+                                    while (s_ > 2) {
+                                        if (functionScopeNames[s_] == "__New" && (functionScopes[s_ - 1].Has("__Get") || functionScopes[s_ - 1].Has("__Set")) ) {
+                                            replacement:={args:[{type:"string",value:t_.left.propName},{keys:[{type:"obj key",value:"value"}],type:"object",values:[t_.right]}],func:{parent:{type:"variable",value:"this"},propName:"DefineProp",type:"property access"},type:"function call"}
+                                            if (Type(obj) == "Object") {
+                                                obj.%key%:=replacement
+                                            } else {
+                                                obj[key]:=replacement
+                                            }
+                                            break
+                                        }
+                                        s_--
+                                    }
+
+                                }
+
+                        }
                     }
                     return do(t_, "left") " " t_.op " " do(t_, "right")
                 case "comma multi-statement":
@@ -2632,7 +2678,9 @@ walker_replacer() {
                                     if (t_.args.Length > 1) {
                                         ; Object.SetCapacity(Key, ByteSize)
                                         ; `this.SetCapacity("a",7)` -> `this.a := Buffer(7)`
-                                        replacement:={left:{type: "property access", parent: t_.func.parent, propName: t_.args[1].value}, op:":=", right:{args:[t_.args[2]], func:{type:"variable", value:"Buffer"}, type:"function call"}, type:"binary"}
+                                        ; replacement:={left:{type: "property access", parent: t_.func.parent, propName: t_.args[1].value}, op:":=", right:{args:[t_.args[2]], func:{type:"variable", value:"Buffer"}, type:"function call"}, type:"binary"}
+                                        ; `this.SetCapacity("a",7)` -> `this.DefineProp("a", {value: Buffer(7)})`
+                                        replacement:={args:[t_.args[1],{keys:[{type:"obj key",value:"value"}],type:"object",values:[{args:[t_.args[2]],func:{type:"variable",value:"Buffer"},type:"function call"}]}],func:{parent:{type:"variable",value:"this"},propName:"DefineProp",type:"property access"},type:"function call"}
                                         if (Type(obj) == "Object") {
                                             obj.%key%:=replacement
                                         } else {
@@ -2649,7 +2697,11 @@ walker_replacer() {
                                 case "GetAddress":
                                     ; Ptr := Object.GetAddress(Key)
                                     ; `this.GetAddress("a")` -> `this.a.Ptr`
-                                    replacement:={type: "property access", parent: {type: "property access", parent: t_.func.parent, propName: t_.args[1].value}, propName: "Ptr"}
+                                    ; replacement:={type: "property access", parent: {type: "property access", parent: t_.func.parent, propName: t_.args[1].value}, propName: "Ptr"}
+                                    ; `this.GetAddress("a")` -> `(this.HasOwnProp("a") ? this.GetOwnPropDesc("a") : "")`
+                                    ; replacement:={type:"group",value:{condition:{args:[t_.args[1]],func:{parent:{type:"variable",value:"this"},propName:"HasOwnProp",type:"property access"},type:"function call"},ifFalse:{type:"string",value:""},ifTrue:{args:[t_.args[1]],func:{parent:{type:"variable",value:"this"},propName:"GetOwnPropDesc",type:"property access"},type:"function call"},type:"ternary"}}
+                                    replacement:={type:"group",value:{condition:{args:[t_.args[1]],func:{parent:{type:"variable",value:"this"},propName:"HasOwnProp",type:"property access"},type:"function call"},ifFalse:{type:"string",value:""},ifTrue:{parent:{parent:{args:[t_.args[1]],func:{parent:{type:"variable",value:"this"},propName:"GetOwnPropDesc",type:"property access"},type:"function call"},propName:"value",type:"property access"},propName:"Ptr",type:"property access"},type:"ternary"}}
+
                                     if (Type(obj) == "Object") {
                                         obj.%key%:=replacement
                                     } else {
