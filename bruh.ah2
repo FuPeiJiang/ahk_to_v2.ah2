@@ -1658,7 +1658,8 @@ string_to_variable_or_prop(str) {
 ; AHK_parse("IfEqual, Member, % ComObjCreate(),               Return this.NET_LUID()")
 ; AHK_parse(FileRead("reservedVar.ahk"))
 ; AHK_parse(FileRead("reservedVar2.ahk"))
-AHK_parse(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
+; AHK_parse(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
+AHK_parse("DllCall(`"gdiplus\GdipCreateFromHDC`", A_PtrSize ? `"UPtr`" : `"UInt`", 0)")
 ; AHK_parse(A_Clipboard)
 
 
@@ -2568,6 +2569,17 @@ walker_replacer() {
                 case "comma multi-statement":
                     return do(t_, "left") ", " do(t_, "right")
                 case "ternary":
+                    ; A_PtrSize ? "UPtr" : "UInt" -> "Ptr"
+                    if (t_.condition.type == "variable" && t_.condition.value = "A_PtrSize"
+                    && t_.ifTrue.type == "string" && t_.ifTrue.value = "UPtr"
+                    && t_.ifFalse.type == "string" && t_.ifFalse.value = "UInt") {
+                        replacement:={type:"string",value:"Ptr"}
+                        if (Type(obj) == "Object") {
+                            obj.%key%:=replacement
+                        } else {
+                            obj[key]:=replacement
+                        }
+                    }
                     return do(t_, "condition") " ? " do(t_, "ifTrue") " : " do(t_, "ifFalse")
                 case "concat":
                     return do(t_, "left") (t_.op == "" ? " " : t_.op) do(t_, "right")
@@ -2636,6 +2648,10 @@ walker_replacer() {
                                     i_:=2
                                     while (i_ < t_.args.length) {
                                         ; last character == "*" or "P"
+
+                                        do(t_.args, i_) ;do some replacements before checking...
+                                        ; like: A_PtrSize ? "UPtr" : "UInt"
+
                                         switch SubStr(t_.args[i_].value, -1), 0 {
                                             case "*", "P":
                                                 switch t_.args[i_ + 1].type {
