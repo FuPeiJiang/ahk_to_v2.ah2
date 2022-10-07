@@ -1659,8 +1659,8 @@ string_to_variable_or_prop(str) {
 ; AHK_parse(FileRead("reservedVar.ahk"))
 ; AHK_parse(FileRead("reservedVar2.ahk"))
 ; AHK_parse(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
-AHK_parse(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
-; AHK_parse(A_Clipboard)
+; AHK_parse(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
+AHK_parse(A_Clipboard)
 
 
 
@@ -2309,6 +2309,11 @@ walker_replacer() {
                     functionScopeNames.Pop()
                     currentScope:=functionScopes.Pop()
                 case "function definition":
+                    for e_ in v_.args {
+                        if (e_.type == "binary" && e_.op == "=") {
+                            e_.op := ":="
+                        }
+                    }
                     currentScope:=Map()
                     currentScope.CaseSense:="Off"
                     functionScopes.Push(currentScope)
@@ -2517,7 +2522,7 @@ walker_replacer() {
                                     case "Buffer with Ptr":
                                         ; &var -> var
                                         if (Type(obj) == "Object") {
-                                            if (obj.op == "+" || obj.op == "-") {
+                                            if (obj.type == "binary" && (obj.op == "+" || obj.op == "-")) {
                                                 _var:={type: "property access", parent: _var, propName: "Ptr"}
                                             }
                                             obj.%key%:=_var
@@ -2659,20 +2664,27 @@ walker_replacer() {
                                         ; last character == "*" or "P"
 
                                         do(t_.args, i_) ;do some replacements before checking...
+
+                                        if (t_.args[i_].type == "variable") {
+                                            t_.args[i_].type:="string"
+                                        }
                                         ; like: A_PtrSize ? "UPtr" : "UInt"
 
                                         switch SubStr(t_.args[i_].value, -1), 0 {
                                             case "*", "P":
                                                 switch t_.args[i_ + 1].type {
                                                     case "variable":
-                                                        t_.args[i_ + 1]:={type:"v2 pre-unary", op:"&", right:t_.args[i_ + 1]}
+                                                        t_.args[i_ + 1]:={type:"v2 pre-unary",op:"&",right:{type:"binary",op:":=",left:t_.args[i_ + 1],right:{type:"number",value:0}}}
                                                     case "binary":
-                                                        t_.args[i_ + 1]:={type:"v2 pre-unary", op:"&", right:t_.args[i_ + 1]}
+                                                        if (t_.args[i_ + 1].op == ":=") {
+                                                            t_.args[i_+ 1]:={type:"v2 pre-unary", op:"&", right:t_.args[i_ + 1]}
+                                                        }
                                                 }
                                         }
 
                                         i_+=2
                                     }
+
                                 case "RegisterCallback":
                                     t_.func.value:="CallbackCreate"
                                     t_.args[1]:=string_to_variable_or_prop(t_.args[1].value)
@@ -3029,7 +3041,10 @@ walker_undefinedVars() {
                         case "variable":
                             currentScope[t_.right.value]:=t_.right.value
                         case "binary":
-                            currentScope[t_.right.left.value]:=t_.right.left.value
+                            left_:=t_.right.left
+                            if (left_.type == "variable") {
+                                currentScope[left_.value]:=left_.value
+                            }
                     }
                     return t_.op do(t_, "right")
                 case "post-unary assignment":
