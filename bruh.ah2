@@ -33,6 +33,8 @@ AHK_parse(str) {
         ":=", 11, "+=", 11, "-=", 11, "*=", 11, "/=", 11, "//=", 11, ".=", 11, "|=", 11, "&=", 11, "^=", 11, ">>=", 11, "<<=", 11, "||", 10, "or", 10, "&&", 9, "and", 9, "=", 8, "==", 8, "<>", 8, "!=", 8, ">", 7, "<", 7, ">=", 7, "<=", 7, "~=", 6, ".", 5, "&", 4, "^", 4, "|", 4, "<<", 3, ">>", 3, "+", 2, "-", 2, "*", 1, "/", 1, "//", 1, "**", 0,
     )
 
+    toIsFunction:=Map("integer", "IsInteger", "float", "IsFloat", "number", "IsNumber", "digit", "IsDigit", "xdigit", "IsXDigit", "alpha", "IsAlpha", "upper", "IsUpper", "lower", "IsLower", "alnum", "IsAlnum", "space", "IsSpace", "time", "IsTime")
+
     skip_comments()
 
     statements_loop:
@@ -142,6 +144,19 @@ AHK_parse(str) {
                     toPush:=value_expression()
                     if (toPush.type == "variable") {
                         toPush:={type: "group", value: toPush}
+                    } else if (toPush.type == "concat" && toPush.right.left.value = "is") {
+
+                        maybeNot := toPush.right.right
+                        if (maybeNot.type == "pre-unary" && maybeNot.op == "not") {
+                            funcVar := maybeNot.right
+                            funcVar.value := toIsFunction[StrLower(funcVar.value)]
+                            toPush:={type: "group",value: {op: "!",right: {args: [toPush.left],func: funcVar,type: "function call"},type: "pre-unary"}}
+                        } else {
+                            funcVar := maybeNot
+                            funcVar.value := toIsFunction[StrLower(funcVar.value)]
+                            toPush:={type: "group",value: {args: [toPush.left],func: funcVar,type: "function call"}}
+                        }
+
                     }
                     char_:=SubStr(str, c_, 1)
                     if (char_=="{") {
@@ -1212,9 +1227,9 @@ AHK_parse(str) {
                         left:={type: "pre-unary", op: op, right: right}
                     }
                     break
-                case "n":
+                case "n","N":
                     word_:=SubStr(str, c_, 3)
-                    if (word_=="not") {
+                    if (word_="not") {
                         c_+=3
                         skip_comments()
                         left:={type: "pre-unary", op: "not", right: value_expression()}
@@ -1660,7 +1675,8 @@ string_to_variable_or_prop(str) {
 ; AHK_parse(FileRead("reservedVar2.ahk"))
 ; AHK_parse(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
 ; AHK_parse(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
-AHK_parse(A_Clipboard)
+AHK_parse(FileRead("toIsFunction.ahk"))
+; AHK_parse(A_Clipboard)
 
 
 
@@ -3103,7 +3119,8 @@ walker_undefinedVars() {
 }
 walker_undefinedVars()
 
-d currentArr
+; d currentArr
+MsgBox A_Clipboard:=anti_JSON_stringify(currentArr)
 
 what() {
     finalStr:=""
@@ -3407,3 +3424,71 @@ A_Clipboard:=what()
 return
 
 f3::Exitapp
+
+anti_JSON_stringify(obj, maxDepth := 21) {
+
+    stringified := ""
+
+    escape(str) {
+        str:=StrReplace(str, "\", "\\", true)
+        str:=StrReplace(str, "`t", "\t", true)
+        str:=StrReplace(str, "`b", "\b", true)
+        str:=StrReplace(str, "`n", "\n", true)
+        str:=StrReplace(str, "`r", "\r", true)
+        str:=StrReplace(str, "`f", "\f", true)
+        str:=StrReplace(str, "`"", "\`"", true)
+        return str
+    }
+    ok(obj, depth) {
+        switch (Type(obj)) {
+            case 'Map':
+                if (depth > maxDepth) {
+                    stringified.="`"[DEEP ...Map]`""
+                } else {
+                    stringified.="{"
+                    for k, v in obj {
+                        (A_Index > 1 && stringified.=",")
+                        ;ESCAPE THIS, using java thingy
+                        stringified.=escape(k) ": "
+                        ok(v, depth+1)
+                    }
+                    stringified.="}"
+                }
+            case 'Object':
+                if (depth > maxDepth) {
+                    stringified.="`"[DEEP ...Object]`""
+                } else {
+                    stringified.="{"
+                    for k, v in obj.OwnProps() {
+                        (A_Index > 1 && stringified.=",")
+                        ;ESCAPE THIS, using java thingy
+                        stringified.=escape(k) ": "
+                        ok(v, depth+1)
+                    }
+                    stringified.="}"
+                }
+            case 'Array':
+                if (depth > maxDepth) {
+                    stringified.="`"[DEEP ...Array]`""
+                } else {
+                    stringified.="["
+                    for v in obj {
+                        (A_Index > 1 && stringified.=",")
+                        ok(v, depth+1)
+                    }
+                    stringified.="]"
+                }
+            case 'String':
+                ; escape with java
+                stringified.="`"" escape(obj) "`"" ;in order to escape \n and etc
+            case "Integer", "Float":
+                stringified.=obj
+        }
+
+    }
+    ok(obj, 0)
+
+    return stringified
+
+
+}
