@@ -6,10 +6,10 @@ SetWorkingDir A_ScriptDir ; Ensures a consistent starting directory.
 
 #Include <Array>
 
+aaa(str) {
+
 currentArr:=[]
 AHK_parse(str) {
-    global currentArr
-
     str:=StrReplace(str, "`r`n", "`n", true)
     str:=StrReplace(str, "`r", "`n", true)
     strBak:=str
@@ -1618,6 +1618,8 @@ AHK_parse(str) {
     }
 
 }
+AHK_parse(str)
+
 string_to_variable_or_prop(str) {
     loop parse str, "." {
         if (A_Index > 1) {
@@ -1628,59 +1630,6 @@ string_to_variable_or_prop(str) {
     }
     return parent
 }
-
-
-; AHK_parse(FileRead("test.ahk"))
-; AHK_parse(FileRead("MsgBox.ahk"))
-; AHK_parse(FileRead("MsgBox_Insane.ahk"))
-; AHK_parse(FileRead("test2.ahk"))
-; AHK_parse(FileRead("concat.ahk"))
-; AHK_parse(FileRead("object.ahk"))
-; AHK_parse(FileRead("basic.ahk"))
-; AHK_parse(FileRead("hotkey.ahk"))
-; AHK_parse(FileRead("!get colour_mid.ahk"))
-; AHK_parse(FileRead("Accelerated Scrolling 1.3.ahk"))
-; AHK_parse(FileRead("ifelse.ahk"))
-; AHK_parse(FileRead("RunAsTask.ahk"))
-; AHK_parse(FileRead("Return comma ErrorLevel assignment.ahk"))
-; AHK_parse(FileRead("Return comma ErrorLevel assignment2.ahk"))
-; AHK_parse(FileRead("string continuation section.ahk"))
-; AHK_parse(FileRead("RunCMD.ahk"))
-; AHK_parse(FileRead("File.ReadLine.ahk"))
-; AHK_parse(FileRead("Clipboard A_Clipboard.ahk"))
-; AHK_parse(FileRead("while.ahk"))
-; AHK_parse("buildNumber:=splitByDot[3]")
-; AHK_parse("buildNumber:=splitByDot[ComObjCreate()+1]")
-; AHK_parse("if(true){}else{}")
-; AHK_parse(FileRead("switch.ahk"))
-; AHK_parse(FileRead("switch2.ahk"))
-; AHK_parse(FileRead("_VD.ahk"))
-; AHK_parse("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
-; AHK_parse("[::MsgBox hello")
-; AHK_parse("* & a::MsgBox hello")
-; AHK_parse("* & /::MsgBox hello")
-; AHK_parse("* & /::MsgBox hello")
-; AHK_parse("+ & a::MsgBox hello")
-; AHK_parse("MsgBox % 2`n+ & a::MsgBox hello")
-; AHK_parse("MsgBox 2`n+ & a::MsgBox hello")
-; AHK_parse("MsgBox % 2`n+2`n+ & a::MsgBox hello")
-; AHK_parse("MsgBox 2`n+2`n+ & a::MsgBox hello")
-; AHK_parse(":::MsgBox hello")
-; AHK_parse("Enter::MsgBox hello")
-; AHK_parse('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
-; AHK_parse(FileRead("gui.ahk"))
-; AHK_parse(FileRead("IfEqual.ahk"))
-; AHK_parse("IfEqual, Member, InterfaceLuid,               Return this.NET_LUID()")
-; AHK_parse("IfEqual, Member, % ComObjCreate(),               Return this.NET_LUID()")
-; AHK_parse(FileRead("reservedVar.ahk"))
-; AHK_parse(FileRead("reservedVar2.ahk"))
-; AHK_parse(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
-; AHK_parse(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
-; AHK_parse(FileRead("toIsFunction.ahk"))
-AHK_parse(FileRead("StringSplit.ahk"))
-; AHK_parse(A_Clipboard)
-
-
 
 superGlobalVarsMap:=Map()
 superGlobalVarsMap.CaseSense:="Off"
@@ -1721,7 +1670,6 @@ superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
 )
 
 walker_superGlobalVars() {
-    global superGlobalVarsMap
     finalStr:=""
     indent:=""
 
@@ -1919,19 +1867,12 @@ walker_superGlobalVars() {
 }
 
 walker_superGlobalVars()
-superGlobalVarsArr:=[]
-for k_ in superGlobalVarsMap {
-    superGlobalVarsArr.Push(k_)
-}
-; d superGlobalVarsArr
 
 globalVarsMap:=Map()
 globalVarsMap.CaseSense:="Off"
 globalFunctionIndices:=[]
 
 walker_globalVars() {
-    global globalVarsMap
-    global globalFunctionIndices
     finalStr:=""
     indent:=""
 
@@ -2131,11 +2072,6 @@ walker_globalVars() {
 }
 
 walker_globalVars()
-globalVarsArr:=[]
-for k_ in globalVarsMap {
-    globalVarsArr.Push(k_)
-}
-; d globalVarsArr
 
 reservedVars := Map()
 reservedVars.CaseSense := "Off"
@@ -2144,7 +2080,6 @@ reservedVars.Set(
 )
 
 walker_replacer() {
-    global superGlobalVarsMap
     finalStr:=""
     indent:=""
 
@@ -2862,8 +2797,6 @@ walker_replacer() {
 walker_replacer()
 
 walker_undefinedVars() {
-    global superGlobalVarsMap
-    global globalFunctionIndices
     finalStr:=""
     indent:=""
     functionScopes:=[superGlobalVarsMap]
@@ -3162,10 +3095,6 @@ walker_undefinedVars() {
 }
 walker_undefinedVars()
 
-; d currentArr
-; MsgBox A_Clipboard:=anti_JSON_stringify(currentArr)
-MsgBox A_Clipboard:=JSON_stringify(currentArr)
-
 what() {
     finalStr:=""
     indent:=""
@@ -3463,11 +3392,9 @@ what() {
 
 }
 
-A_Clipboard:=what()
-
-return
-
-f3::Exitapp
+converted:=what()
+return {currentArr:currentArr,converted:converted}
+}
 
 anti_JSON_stringify(obj, maxDepth := 21) {
 
@@ -3603,3 +3530,69 @@ JSON_stringify(obj, maxDepth := 21) {
 
 
 }
+
+loop 1 {
+if (IsSet(__scintilla__)) {
+    break
+}
+
+; bbb:=aaa(FileRead("test.ahk"))
+; bbb:=aaa(FileRead("MsgBox.ahk"))
+; bbb:=aaa(FileRead("MsgBox_Insane.ahk"))
+; bbb:=aaa(FileRead("test2.ahk"))
+; bbb:=aaa(FileRead("concat.ahk"))
+; bbb:=aaa(FileRead("object.ahk"))
+; bbb:=aaa(FileRead("basic.ahk"))
+; bbb:=aaa(FileRead("hotkey.ahk"))
+; bbb:=aaa(FileRead("!get colour_mid.ahk"))
+; bbb:=aaa(FileRead("Accelerated Scrolling 1.3.ahk"))
+; bbb:=aaa(FileRead("ifelse.ahk"))
+; bbb:=aaa(FileRead("RunAsTask.ahk"))
+; bbb:=aaa(FileRead("Return comma ErrorLevel assignment.ahk"))
+; bbb:=aaa(FileRead("Return comma ErrorLevel assignment2.ahk"))
+; bbb:=aaa(FileRead("string continuation section.ahk"))
+; bbb:=aaa(FileRead("RunCMD.ahk"))
+; bbb:=aaa(FileRead("File.ReadLine.ahk"))
+; bbb:=aaa(FileRead("Clipboard A_Clipboard.ahk"))
+; bbb:=aaa(FileRead("while.ahk"))
+; bbb:=aaa("buildNumber:=splitByDot[3]")
+; bbb:=aaa("buildNumber:=splitByDot[ComObjCreate()+1]")
+; bbb:=aaa("if(true){}else{}")
+; bbb:=aaa(FileRead("switch.ahk"))
+; bbb:=aaa(FileRead("switch2.ahk"))
+; bbb:=aaa(FileRead("_VD.ahk"))
+; bbb:=aaa("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
+; bbb:=aaa("[::MsgBox hello")
+; bbb:=aaa("* & a::MsgBox hello")
+; bbb:=aaa("* & /::MsgBox hello")
+; bbb:=aaa("* & /::MsgBox hello")
+; bbb:=aaa("+ & a::MsgBox hello")
+; bbb:=aaa("MsgBox % 2`n+ & a::MsgBox hello")
+; bbb:=aaa("MsgBox 2`n+ & a::MsgBox hello")
+; bbb:=aaa("MsgBox % 2`n+2`n+ & a::MsgBox hello")
+; bbb:=aaa("MsgBox 2`n+2`n+ & a::MsgBox hello")
+; bbb:=aaa(":::MsgBox hello")
+; bbb:=aaa("Enter::MsgBox hello")
+; bbb:=aaa('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
+; bbb:=aaa(FileRead("gui.ahk"))
+; bbb:=aaa(FileRead("IfEqual.ahk"))
+; bbb:=aaa("IfEqual, Member, InterfaceLuid,               Return this.NET_LUID()")
+; bbb:=aaa("IfEqual, Member, % ComObjCreate(),               Return this.NET_LUID()")
+; bbb:=aaa(FileRead("reservedVar.ahk"))
+; bbb:=aaa(FileRead("reservedVar2.ahk"))
+; bbb:=aaa(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
+; bbb:=aaa(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
+; bbb:=aaa(FileRead("toIsFunction.ahk"))
+bbb:=aaa(FileRead("StringSplit.ahk"))
+; bbb:=aaa(A_Clipboard)
+
+; d currentArr
+; MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
+MsgBox A_Clipboard:=JSON_stringify(bbb.currentArr)
+A_Clipboard:=bbb.converted
+
+
+
+}
+
+f3::Exitapp

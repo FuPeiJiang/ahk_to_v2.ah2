@@ -1,3 +1,9 @@
+![QuickConvertorV2_scintilla.png](QuickConvertorV2_scintilla.png)
+
+`QuickConvertorV2_scintilla.ah2` entirely "stolen" from https://github.com/mmikeww/AHK-v2-script-converter/blob/master/QuickConvertorV2_scintilla.ahk<br>
+
+___
+
 here's how I work: I take a script to convert,<br>
 instead of converting functions (because that's boring)<br>
 I just finished RunCMD.ahk and now I have no script to convert<br>
