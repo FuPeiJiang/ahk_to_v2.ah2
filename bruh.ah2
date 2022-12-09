@@ -209,8 +209,7 @@ AHK_parse(str) {
                         c_++
                         skip_comments()
                         out_v1str:=skip_v1str_noNeedToEscapeComma()
-                        currentArr.Push({type: "binary", op: ":=", left:OutputVar_varName.0, right: v1str_to_expression(out_v1str)})
-
+                        currentArr.Push({type:"binary",op:":=",left:{type:"variable",value: OutputVar_varName.0},right:v1str_to_expression(out_v1str)})
                     } else {
                         ; if it's unary plus, or *2, it's passed to MsgBox as v1str
                         skip_commandArgs()
@@ -739,6 +738,8 @@ AHK_parse(str) {
                     boolArr:=[0,0,0,2,2,2,2,2,0]
                 case "IfEqual","IfNotEqual","IfLess","IfLessOrEqual","IfGreater","IfGreaterOrEqual":
                     boolArr:=[0,2]
+                case "StringSplit":
+                    boolArr:=[0,0,2,3]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -966,7 +967,6 @@ AHK_parse(str) {
                     default:
                         MsgBox "not implemented: very unknown after IfEqual"
                 }
-
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -989,7 +989,7 @@ AHK_parse(str) {
 
         ret_v1str:=""
         while (true) {
-            RegExMatch(str, "[^\s,]+(?:[ \t]+[^; \t,][^\s,]*)*", &OutputVar_v1str, c_)
+            RegExMatch(str, "(?:``,|[^\s,])+(?:[ \t]+[^; \t,](?:``,|[^\s,])*)*", &OutputVar_v1str, c_)
             if (A_Index > 1) {
                 if (InStr(OutputVar_v1str.0, "::", true)) {
                     aHotkeyWasFound:=backtrack_for_hotkey:=c_
@@ -1008,7 +1008,8 @@ AHK_parse(str) {
                     break
             }
         }
-        return ret_v1str
+        unescaped:=StrReplace(ret_v1str, "``,", ",", true)
+        return unescaped
     }
 
     skip_v1str_noNeedToEscapeComma() {
@@ -1675,7 +1676,8 @@ string_to_variable_or_prop(str) {
 ; AHK_parse(FileRead("reservedVar2.ahk"))
 ; AHK_parse(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
 ; AHK_parse(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
-AHK_parse(FileRead("toIsFunction.ahk"))
+; AHK_parse(FileRead("toIsFunction.ahk"))
+AHK_parse(FileRead("StringSplit.ahk"))
 ; AHK_parse(A_Clipboard)
 
 
@@ -2243,6 +2245,11 @@ walker_replacer() {
                                 v_:=statements[k_]
                                 return
                             }
+                        case "StringSplit":
+                            statements[k_] := {type:"binary",op:":=",left:v_.args.RemoveAt(1),right:{type:"function call",func:{type:"variable",value:"StrSplit"},args:v_.args}}
+                            outVarName:=statements[k_].left.value
+                            currentScope[outVarName]:="StringSplit root"
+                            currentScope[outVarName "%A_Index%"]:="StringSplit Element"
                     }
                     if (v_.args.Length) {
                         finalStr.=v_._name " " do(v_.args, 1)
@@ -2457,6 +2464,14 @@ walker_replacer() {
                                             } else {
                                                 obj[key]:=replacement
                                             }
+                                        case "StringSplit Element":
+                                            ; r%A_Index% -> r[A_Index]
+                                            replacement:={type:"array access",parent:{type:"variable",value:SubStr(t_.value,1,-9)},key:{type:"variable",value:"A_Index"}}
+                                            if (Type(obj) == "Object") {
+                                                obj.%key%:=replacement
+                                            } else {
+                                                obj[key]:=replacement
+                                            }
                                         case "Gui Control Hwnd":
                                             ; HWndExplanation_Edit -> HWndExplanation_Edit.Hwnd
                                             replacement:={type: "property access", parent: t_, propName: "Hwnd"}
@@ -2493,6 +2508,34 @@ walker_replacer() {
                                             }
                                     }
                                     break
+                                }
+
+                                ; RegExMatch(t_.value, "(?:[0-9]*[^0-9]+)*")
+                                ; 32fjweo23423423ifjwe0323 -> 32fjweo23423423ifjwe
+                                ; fjweo23423423ifjwe0323 -> fjweo23423423ifjwe
+                                rtrimmedIntegers:=RTrim(t_.value, "0123456789")
+                                if (_scope.Has(rtrimmedIntegers)) {
+                                    switch _scope[rtrimmedIntegers] {
+                                        case "StringSplit root":
+                                            integerOnTheRight:=SubStr(t_.value, StrLen(rtrimmedIntegers) + 1)
+                                            if (integerOnTheRight=="0") {
+                                                ; r0 -> r.Length
+                                                replacement:={type:"property access",parent:{type:"variable",value:rtrimmedIntegers},propName:"Length"}
+                                                if (Type(obj) == "Object") {
+                                                    obj.%key%:=replacement
+                                                } else {
+                                                    obj[key]:=replacement
+                                                }
+                                            } else {
+                                                ; r2 -> r[2]
+                                                replacement:={type:"array access",parent:{type:"variable",value:rtrimmedIntegers},key:{type:"number",value:Integer(integerOnTheRight)}}
+                                                if (Type(obj) == "Object") {
+                                                    obj.%key%:=replacement
+                                                } else {
+                                                    obj[key]:=replacement
+                                                }
+                                            }
+                                    }
                                 }
                             }
                     }
@@ -3449,7 +3492,7 @@ anti_JSON_stringify(obj, maxDepth := 21) {
                     for k, v in obj {
                         (A_Index > 1 && stringified.=",")
                         ;ESCAPE THIS, using java thingy
-                        stringified.=escape(k) ": "
+                        stringified.=escape(k) ":"
                         ok(v, depth+1)
                     }
                     stringified.="}"
@@ -3462,7 +3505,7 @@ anti_JSON_stringify(obj, maxDepth := 21) {
                     for k, v in obj.OwnProps() {
                         (A_Index > 1 && stringified.=",")
                         ;ESCAPE THIS, using java thingy
-                        stringified.=escape(k) ": "
+                        stringified.=escape(k) ":"
                         ok(v, depth+1)
                     }
                     stringified.="}"
