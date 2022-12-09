@@ -3163,7 +3163,8 @@ walker_undefinedVars() {
 walker_undefinedVars()
 
 ; d currentArr
-MsgBox A_Clipboard:=anti_JSON_stringify(currentArr)
+; MsgBox A_Clipboard:=anti_JSON_stringify(currentArr)
+MsgBox A_Clipboard:=JSON_stringify(currentArr)
 
 what() {
     finalStr:=""
@@ -3506,6 +3507,73 @@ anti_JSON_stringify(obj, maxDepth := 21) {
                         (A_Index > 1 && stringified.=",")
                         ;ESCAPE THIS, using java thingy
                         stringified.=escape(k) ":"
+                        ok(v, depth+1)
+                    }
+                    stringified.="}"
+                }
+            case 'Array':
+                if (depth > maxDepth) {
+                    stringified.="`"[DEEP ...Array]`""
+                } else {
+                    stringified.="["
+                    for v in obj {
+                        (A_Index > 1 && stringified.=",")
+                        ok(v, depth+1)
+                    }
+                    stringified.="]"
+                }
+            case 'String':
+                ; escape with java
+                stringified.="`"" escape(obj) "`"" ;in order to escape \n and etc
+            case "Integer", "Float":
+                stringified.=obj
+        }
+
+    }
+    ok(obj, 0)
+
+    return stringified
+
+}
+
+JSON_stringify(obj, maxDepth := 21) {
+
+    stringified := ""
+
+    escape(str) {
+        str:=StrReplace(str, "\", "\\", true)
+        str:=StrReplace(str, "`t", "\t", true)
+        str:=StrReplace(str, "`b", "\b", true)
+        str:=StrReplace(str, "`n", "\n", true)
+        str:=StrReplace(str, "`r", "\r", true)
+        str:=StrReplace(str, "`f", "\f", true)
+        str:=StrReplace(str, "`"", "\`"", true)
+        return str
+    }
+    ok(obj, depth) {
+        switch (Type(obj)) {
+            case 'Map':
+                if (depth > maxDepth) {
+                    stringified.="`"[DEEP ...Map]`""
+                } else {
+                    stringified.="{"
+                    for k, v in obj {
+                        (A_Index > 1 && stringified.=",")
+                        ;ESCAPE THIS, using java thingy
+                        stringified.="`"" escape(k) "`": "
+                        ok(v, depth+1)
+                    }
+                    stringified.="}"
+                }
+            case 'Object':
+                if (depth > maxDepth) {
+                    stringified.="`"[DEEP ...Object]`""
+                } else {
+                    stringified.="{"
+                    for k, v in obj.OwnProps() {
+                        (A_Index > 1 && stringified.=",")
+                        ;ESCAPE THIS, using java thingy
+                        stringified.="`"" escape(k) "`": "
                         ok(v, depth+1)
                     }
                     stringified.="}"
