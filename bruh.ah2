@@ -1634,39 +1634,39 @@ string_to_variable_or_prop(str) {
 superGlobalVarsMap:=Map()
 superGlobalVarsMap.CaseSense:="Off"
 superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
-    ,"A_Index","A_Index"
-    ,"A_MaxHotkeysPerInterval","A_MaxHotkeysPerInterval"
-    ,"A_TimeSincePriorHotkey","A_TimeSincePriorHotkey"
-    ,"A_PriorHotkey","A_PriorHotkey"
-    ,"A_ThisHotkey","A_ThisHotkey"
-    ,"A_AhkPath","A_AhkPath"
-    ,"A_IsAdmin","A_IsAdmin"
-    ,"A_IsCompiled","A_IsCompiled"
-    ,"A_LastError","A_LastError"
-    ,"A_ScriptFullPath","A_ScriptFullPath"
-    ,"A_ScriptName","A_ScriptName"
-    ,"A_Space","A_Space"
-    ,"A_Args","A_Args"
-    ,"A_PtrSize","A_PtrSize"
-    ,"ErrorLevel","ErrorLevel"
+    ,"A_Index",{vartype:"simply defined"}
+    ,"A_MaxHotkeysPerInterval",{vartype:"simply defined"}
+    ,"A_TimeSincePriorHotkey",{vartype:"simply defined"}
+    ,"A_PriorHotkey",{vartype:"simply defined"}
+    ,"A_ThisHotkey",{vartype:"simply defined"}
+    ,"A_AhkPath",{vartype:"simply defined"}
+    ,"A_IsAdmin",{vartype:"simply defined"}
+    ,"A_IsCompiled",{vartype:"simply defined"}
+    ,"A_LastError",{vartype:"simply defined"}
+    ,"A_ScriptFullPath",{vartype:"simply defined"}
+    ,"A_ScriptName",{vartype:"simply defined"}
+    ,"A_Space",{vartype:"simply defined"}
+    ,"A_Args",{vartype:"simply defined"}
+    ,"A_PtrSize",{vartype:"simply defined"}
+    ,"ErrorLevel",{vartype:"simply defined"}
     ; bool
-    ,"True","True"
-    ,"False","False"
+    ,"True",{vartype:"simply defined"}
+    ,"False",{vartype:"simply defined"}
     ; functions
-    ,"ComObject","ComObject"
-    ,"DllCall","DllCall"
-    ,"Buffer","Buffer"
-    ,"StrLen","StrLen"
-    ,"SubStr","SubStr"
-    ,"Floor","Floor"
-    ,"FileOpen","FileOpen"
-    ,"Format","Format"
-    ,"NumGet","NumGet"
-    ,"NumPut","NumPut"
-    ,"HasMethod","HasMethod"
-    ,"StrPtr","StrPtr"
-    ,"InStr","InStr"
-    ,"StrGet","StrGet"
+    ,"ComObject",{vartype:"simply defined"}
+    ,"DllCall",{vartype:"simply defined"}
+    ,"Buffer",{vartype:"simply defined"}
+    ,"StrLen",{vartype:"simply defined"}
+    ,"SubStr",{vartype:"simply defined"}
+    ,"Floor",{vartype:"simply defined"}
+    ,"FileOpen",{vartype:"simply defined"}
+    ,"Format",{vartype:"simply defined"}
+    ,"NumGet",{vartype:"simply defined"}
+    ,"NumPut",{vartype:"simply defined"}
+    ,"HasMethod",{vartype:"simply defined"}
+    ,"StrPtr",{vartype:"simply defined"}
+    ,"InStr",{vartype:"simply defined"}
+    ,"StrGet",{vartype:"simply defined"}
 )
 
 walker_superGlobalVars() {
@@ -2107,44 +2107,77 @@ walker_replacer() {
                 case "command":
                     switch (v_._name), 0 {
                         case "Gui":
-                            if (!currentScope.Has("myGui")) {
-                                currentScope["myGui"]:="myGui"
-                                v_:={left:{type:"variable", value:"myGui"}, op:":=", right:{args:[], func:{type:"variable", value:"Gui"}, type:"function call"}, type:"binary"}
-                                statements.InsertAt(k_, v_)
-                                withNewline()
-                                k_++, statements_len++
-                                v_:=statements[k_]
-                            }
                             argsArr:=v_.args
-                            switch (argsArr.RemoveAt(1).value), 0 {
-                                case "New":
-                                case "Add":
-                                    if (argsArr[2].type == "string") {
-                                        RegExMatch(argsArr[2].value, "\s*\S*hwnd(\S*)", &OutputVar_hwnd)
-                                        if (OutputVar_hwnd) {
-                                            argsArr[2].value:=SubStr(argsArr[2].value, 1, OutputVar_hwnd.Pos - 1) SubStr(argsArr[2].value, OutputVar_hwnd.Pos + OutputVar_hwnd.Len)
-                                            v_:=statements[k_]:={left:{type:"variable", value:OutputVar_hwnd.1}, op:":=", right:{args:argsArr, func:{parent:{type:"variable", value:"myGui"}, propName:"Add", type:"property access"}, type:"function call"}, type:"binary"}
-                                            withNewline()
-                                            currentScope[OutputVar_hwnd.1]:="Gui Control Hwnd"
-                                            return
-                                        }
+                            arg1 := argsArr.RemoveAt(1).value
+                            pos_colon := InStr(arg1, ":", true)
+                            if (pos_colon) {
+                                guiName:=SubStr(arg1, 1, pos_colon - 1)
+                                guiCommand:=SubStr(arg1, pos_colon + 1)
+                            } else {
+                                guiName:="myGui"
+                                guiCommand:=arg1
+                            }
+
+                            checkOptionsHwnd(optionsNode) {
+                                if (optionsNode.type == "string") {
+                                    RegExMatch(optionsNode.value, "i)\s*\+hwnd(\S*)", &OutputVar_hwnd:="")
+                                    if (OutputVar_hwnd) {
+                                        optionsNode.value:=SubStr(optionsNode.value, 1, OutputVar_hwnd.Pos - 1) SubStr(optionsNode.value, OutputVar_hwnd.Pos + OutputVar_hwnd.Len)
+                                        return OutputVar_hwnd.1
                                     }
-                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:"myGui"}, propName:"Add", type:"property access"}, type:"function call"}
+                                }
+                                return false
+                            }
+                            if (!currentScope.Has(guiName)) {
+                                if (guiCommand="New") {
+                                    guiHwnd:=checkOptionsHwnd(argsArr[1])
+                                    if (guiHwnd) {
+                                        currentScope[guiHwnd]:={vartype:"Gui Hwnd",guiName:guiName}
+                                    }
+                                    newGuiArgs:=argsArr
+                                } else {
+                                    newGuiArgs:=[]
+                                }
+                                v_:={left:{type:"variable", value:guiName}, op:":=", right:{args:newGuiArgs, func:{type:"variable", value:"Gui"}, type:"function call"}, type:"binary"}
+                                if (guiCommand="New") {
+                                    statements[k_]:=v_
+                                    withNewline()
+                                } else {
+                                    statements.InsertAt(k_, v_)
+                                    withNewline()
+                                    k_++, statements_len++
+                                    v_:=statements[k_]
+                                }
+                            }
+                            switch (guiCommand), 0 {
+                                ; case "New":
+                                    ; checkOptionsHwnd(argsArr[1])
+                                case "Add":
+                                    control_hwnd:=checkOptionsHwnd(argsArr[2])
+                                    if (control_hwnd) {
+                                        v_:=statements[k_]:={left:{type:"variable", value:control_hwnd}, op:":=", right:{args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Add", type:"property access"}, type:"function call"}, type:"binary"}
+                                        withNewline()
+                                        currentScope[control_hwnd]:={vartype:"Gui Control Hwnd"}
+                                        return
+                                    }
+                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Add", type:"property access"}, type:"function call"}
                                     withNewline()
                                 case "Show":
                                     if (argsArr.Length == 2) {
-                                        v_:={left:{parent:{type:"variable", value:"myGui"}, propName:"Title", type:"property access"}, op:":=", right:argsArr.Pop(), type:"binary"}
+                                        v_:={left:{parent:{type:"variable", value:guiName}, propName:"Title", type:"property access"}, op:":=", right:argsArr.Pop(), type:"binary"}
                                         statements.InsertAt(k_, v_)
                                         withNewline()
                                         k_++, statements_len++
                                     }
-                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:"myGui"}, propName:"Show", type:"property access"}, type:"function call"}
+                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Show", type:"property access"}, type:"function call"}
                                     withNewline()
                                 case "Submit":
                                 case "Cancel":
                                 case "Destroy":
+                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Destroy", type:"property access"}, type:"function call"}
+                                    withNewline()
                                 case "Font":
-                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:"myGui"}, propName:"SetFont", type:"property access"}, type:"function call"}
+                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"SetFont", type:"property access"}, type:"function call"}
                                     withNewline()
                                 case "Color":
                                 case "Margin":
@@ -2183,8 +2216,8 @@ walker_replacer() {
                         case "StringSplit":
                             statements[k_] := {type:"binary",op:":=",left:v_.args.RemoveAt(1),right:{type:"function call",func:{type:"variable",value:"StrSplit"},args:v_.args}}
                             outVarName:=statements[k_].left.value
-                            currentScope[outVarName]:="StringSplit root"
-                            currentScope[outVarName "%A_Index%"]:="StringSplit Element"
+                            currentScope[outVarName]:={vartype:"StringSplit root"}
+                            currentScope[outVarName "%A_Index%"]:={vartype:"StringSplit Element"}
                     }
                     if (v_.args.Length) {
                         finalStr.=v_._name " " do(v_.args, 1)
@@ -2232,7 +2265,7 @@ walker_replacer() {
                     isStatic:=true
                     for possiblyFunc in v_.statements {
                         if (possiblyFunc.type == "function definition") {
-                            currentScope[possiblyFunc.func.value] := "function inside class"
+                            currentScope[possiblyFunc.func.value] := {vartype:"function inside class"}
                             switch (possiblyFunc.func.value), 0 {
                                 case "__New", "__Delete":
                                     isStatic:=false
@@ -2373,7 +2406,8 @@ walker_replacer() {
                         default:
                             for _scope in functionScopes {
                                 if (_scope.Has(t_.value)) {
-                                    switch _scope[t_.value] {
+                                    varInfo:=_scope[t_.value]
+                                    switch varInfo.vartype {
                                         case "ReadLine Line":
                                             ; var -> var "`n"
                                             replacement:={left:t_, op:" ", right:{type:"string", value:"``n"}, type:"concat"}
@@ -2407,6 +2441,14 @@ walker_replacer() {
                                             } else {
                                                 obj[key]:=replacement
                                             }
+                                        case "Gui Hwnd":
+                                            ; HWndExplanation_Gui -> myGui.Hwnd
+                                            replacement:={type: "property access", parent: {type:"variable", value:varInfo.guiName}, propName: "Hwnd"}
+                                            if (Type(obj) == "Object") {
+                                                obj.%key%:=replacement
+                                            } else {
+                                                obj[key]:=replacement
+                                            }
                                         case "Gui Control Hwnd":
                                             ; HWndExplanation_Edit -> HWndExplanation_Edit.Hwnd
                                             replacement:={type: "property access", parent: t_, propName: "Hwnd"}
@@ -2415,14 +2457,10 @@ walker_replacer() {
                                             } else {
                                                 obj[key]:=replacement
                                             }
+                                        case "rename":
+                                            t_.value := varInfo.replaceWith_
                                         default:
                                             if (reservedVars.Has(t_.value)) {
-                                                maybeAlready:=_scope[t_.value]
-                                                if (Type(maybeAlready) == "Object" && maybeAlready.type == "rename") {
-                                                    t_.value := maybeAlready.value
-                                                    break
-                                                }
-
                                                 replaceWith_:=defaultReplaceWith:=reservedVars[t_.value]
                                                 iterator:=2
                                                 ; doesn't take care of "future" variables...
@@ -2436,7 +2474,7 @@ walker_replacer() {
                                                         }
                                                     }
                                                     ; it's fine, we can use this name
-                                                    _scope[t_.value] := {type:"rename",value:replaceWith_} ;redirect to renamed
+                                                    _scope[t_.value] := {varType:"rename",replaceWith_:replaceWith_} ;redirect to renamed
                                                     t_.value := replaceWith_
                                                     break outer2
                                                 }
@@ -2450,7 +2488,7 @@ walker_replacer() {
                                 ; fjweo23423423ifjwe0323 -> fjweo23423423ifjwe
                                 rtrimmedIntegers:=RTrim(t_.value, "0123456789")
                                 if (_scope.Has(rtrimmedIntegers)) {
-                                    switch _scope[rtrimmedIntegers] {
+                                    switch _scope[rtrimmedIntegers].vartype {
                                         case "StringSplit root":
                                             integerOnTheRight:=SubStr(t_.value, StrLen(rtrimmedIntegers) + 1)
                                             if (integerOnTheRight=="0") {
@@ -2503,7 +2541,7 @@ walker_replacer() {
                         ; buf.Ptr + var
                         for _scope in functionScopes {
                             if (_scope.Has(_var.value)) {
-                                switch _scope[_var.value] {
+                                switch _scope[_var.value].vartype {
                                     case "string so StrPtr":
                                         ; &var -> StrPtr(var)
                                         replacement:={args:[_var], func:{type:"variable", value:"StrPtr"}, type:"function call"}
@@ -2538,9 +2576,9 @@ walker_replacer() {
                     if (t_.op == ":=") {
                         switch t_.right.type {
                             case "string", "concat":
-                                currentScope[do(t_, "left")]:="string so StrPtr"
+                                currentScope[do(t_, "left")]:={vartype:"string so StrPtr"}
                             default:
-                                currentScope[do(t_, "left")]:="simply defined"
+                                currentScope[do(t_, "left")]:={vartype:"simply defined"}
                             ; SubStr too
                         }
                         switch t_.left.type {
@@ -2597,7 +2635,7 @@ walker_replacer() {
                             switch t_.func.value, 0 {
                                 case "VarSetCapacity":
                                     var_:=t_.args.RemoveAt(1)
-                                    currentScope[var_.value]:="Buffer with Ptr"
+                                    currentScope[var_.value]:={vartype:"Buffer with Ptr"}
                                     replacement:={left:var_, op:":=", right:{args:t_.args, func:{type:"variable", value:"Buffer"}, type:"function call"}, type:"binary"}
                                     if (Type(obj) == "Object") {
                                         obj.%key%:=replacement
@@ -2684,8 +2722,8 @@ walker_replacer() {
                                     t_.args[1]:=string_to_variable_or_prop(t_.args[1].value)
                                 case "WinGetList":
                                     if (obj.type == "binary") {
-                                        currentScope[obj.left.value]:="WinGetList Array"
-                                        currentScope[obj.left.value "%A_Index%"]:="WinGetList Element"
+                                        currentScope[obj.left.value]:={vartype:"WinGetList Array"}
+                                        currentScope[obj.left.value "%A_Index%"]:={vartype:"WinGetList Element"}
                                     }
                                 case "InStr":
                                     if (t_.args.Length >= 3 && t_.args[3].type == "function call empty arg") {
@@ -2696,7 +2734,7 @@ walker_replacer() {
                             switch t_.func.propName, 0 {
                                 case "ReadLine":
                                     if (obj.type == "binary") {
-                                        currentScope[obj.left.value]:="ReadLine Line"
+                                        currentScope[obj.left.value]:={vartype:"ReadLine Line"}
                                     }
                                 case "Length":
                                     replacement:=t_.func
@@ -2818,9 +2856,9 @@ walker_undefinedVars() {
             for param in notCurrentArr[i_].args {
                 switch param.type {
                     case "variable":
-                        currentScope[param.value]:=param.value
+                        currentScope[param.value]:={vartype:"simply defined"}
                     case "binary":
-                        currentScope[param.left.value]:=param.left.value
+                        currentScope[param.left.value]:={vartype:"simply defined"}
                 }
             }
 
@@ -2831,7 +2869,7 @@ walker_undefinedVars() {
                 if (v_.type=="function definition") {
                     _currentIndices.Push(k_)
                     if (v_.func.type=="variable") {
-                        currentScope[v_.func.value]:=v_.func.value
+                        currentScope[v_.func.value]:={vartype:"simply defined"}
                     }
                 }
             }
@@ -2918,7 +2956,7 @@ walker_undefinedVars() {
                     finalStr.=indent
                     finalStr.="} "
                 case "class":
-                    currentScope["this"]:="this" ;`this` isn't global, but should be defined in `class`
+                    currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
                     ; this:=3
                     ; MsgBox % this ;3
                 case "function definition":
@@ -3014,7 +3052,7 @@ walker_undefinedVars() {
                                 break outer
                             }
                         case 2:
-                            currentScope[t_.value]:=t_.value
+                            currentScope[t_.value]:={vartype:"simply defined"}
                     }
                     ; currentScope[t_.value]:=t_.value
                 case "first var scope":
@@ -3031,11 +3069,11 @@ walker_undefinedVars() {
                 case "v2 pre-unary": ;assume only &
                     switch t_.right.type {
                         case "variable":
-                            currentScope[t_.right.value]:=t_.right.value
+                            currentScope[t_.right.value]:={vartype:"simply defined"}
                         case "binary":
                             left_:=t_.right.left
                             if (left_.type == "variable") {
-                                currentScope[left_.value]:=left_.value
+                                currentScope[left_.value]:={vartype:"simply defined"}
                             }
                     }
                     return t_.op do(t_, "right")
@@ -3044,7 +3082,7 @@ walker_undefinedVars() {
                 case "binary":
                     if (t_.op==":=") {
                         if (t_.left.type=="variable") {
-                            currentScope[t_.left.value]:=t_.left.value
+                            currentScope[t_.left.value]:={vartype:"simply defined"}
                         }
                     }
                     return do(t_, "left") " " t_.op " " do(t_, "right")
@@ -3575,6 +3613,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa("Enter::MsgBox hello")
 ; bbb:=aaa('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
 ; bbb:=aaa(FileRead("gui.ahk"))
+bbb:=aaa(FileRead("gui2.ahk"))
 ; bbb:=aaa(FileRead("IfEqual.ahk"))
 ; bbb:=aaa("IfEqual, Member, InterfaceLuid,               Return this.NET_LUID()")
 ; bbb:=aaa("IfEqual, Member, % ComObjCreate(),               Return this.NET_LUID()")
@@ -3583,7 +3622,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("this.DefineProp if __Get or __Set is defined, in __New only.ahk"))
 ; bbb:=aaa(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
 ; bbb:=aaa(FileRead("toIsFunction.ahk"))
-bbb:=aaa(FileRead("StringSplit.ahk"))
+; bbb:=aaa(FileRead("StringSplit.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 ; d currentArr
