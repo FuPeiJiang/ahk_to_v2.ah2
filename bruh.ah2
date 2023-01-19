@@ -1218,12 +1218,14 @@ AHK_parse(str) {
                         }
                     }
 
-                    if (right.type == "binary" && orderOfOperations[right.op] > orderOfOperations[op]) {
+                    ; unary should always take precedence over binary
+                    if (right.type == "binary") {
                         left:={type:"pre-unary", op:op, right:right.left}
                         op:=right.op
                         right:=right.right
 
                         left:={type: "binary", op: op, left:left, right: right}
+                        return left
                     } else {
                         left:={type: "pre-unary", op: op, right: right}
                     }
@@ -2315,15 +2317,24 @@ walker_replacer() {
                     functionScopeNames.Pop()
                     currentScope:=functionScopes.Pop()
                 case "function definition":
-                    for e_ in v_.args {
-                        if (e_.type == "binary" && e_.op == "=") {
-                            e_.op := ":="
-                        }
-                    }
                     currentScope:=Map()
                     currentScope.CaseSense:="Off"
                     functionScopes.Push(currentScope)
                     functionScopeNames.Push(v_.func.value)
+
+                    for argIdx, e_ in v_.args {
+                        switch e_.type {
+                            case "binary":
+                                if (e_.op == "=") {
+                                    e_.op := ":="
+                                }
+                                addToScope(e_, "left", {vartype:"simply defined"})
+                            case "variable":
+                                addToScope(v_.args, argIdx, {vartype:"simply defined"})
+                            default:
+                                MsgBox "Parameter not anything jitj430j043j"
+                        }
+                    }
 
                     finalStr.=do(statements, k_) " "
 
@@ -2584,7 +2595,7 @@ walker_replacer() {
                         for _scope in functionScopes {
                             if (_scope.Has(_var.value)) {
                                 switch _scope[_var.value].vartype {
-                                    case "string so StrPtr":
+                                    case "string so StrPtr", "simply defined": ;Parameter defaults to string
                                         ; &var -> StrPtr(var)
                                         replacement:={args:[_var], func:{type:"variable", value:"StrPtr"}, type:"function call"}
                                         if (Type(obj) == "Object") {
@@ -3660,7 +3671,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa("if(true){}else{}")
 ; bbb:=aaa(FileRead("switch.ahk"))
 ; bbb:=aaa(FileRead("switch2.ahk"))
-bbb:=aaa(FileRead("_VD.ahk"))
+; bbb:=aaa(FileRead("_VD.ahk"))
 ; bbb:=aaa("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; bbb:=aaa("[::MsgBox hello")
 ; bbb:=aaa("* & a::MsgBox hello")
@@ -3686,6 +3697,7 @@ bbb:=aaa(FileRead("_VD.ahk"))
 ; bbb:=aaa(FileRead("toIsFunction.ahk"))
 ; bbb:=aaa(FileRead("StringSplit.ahk"))
 ; bbb:=aaa(FileRead("two param ComObjCreate and ComObjQuery.ahk"))
+bbb:=aaa(FileRead("_fixCasingOfPath.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 ; d currentArr
