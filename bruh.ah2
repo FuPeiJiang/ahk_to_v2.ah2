@@ -1627,7 +1627,7 @@ string_to_variable_or_prop(str) {
 
 superGlobalVarsMap:=Map()
 superGlobalVarsMap.CaseSense:="Off"
-superGlobalVarsMap.Set("A_ScriptDir", "A_ScriptDir"
+superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"A_Index",{vartype:"simply defined"}
     ,"A_MaxHotkeysPerInterval",{vartype:"simply defined"}
     ,"A_TimeSincePriorHotkey",{vartype:"simply defined"}
@@ -1722,7 +1722,7 @@ walker_superGlobalVars() {
                     finalStr.="} "
                 case "function definition":
                     if (v_.func.type=="variable") {
-                        superGlobalVarsMap[v_.func.value]:=v_.func.value
+                        superGlobalVarsMap[v_.func.value]:={vartype:"simply defined"}
                     }
                     finalStr.=do(v_) " "
                     v_:=v_.body
@@ -2003,7 +2003,7 @@ walker_globalVars() {
             switch t_.type {
                 case "variable":
                     if (!superGlobalVarsMap.Has(t_.value)) {
-                        globalVarsMap[t_.value]:=t_.value
+                        globalVarsMap[t_.value]:={vartype:"simply defined"}
                     }
                 case "first var scope":
                     return do(t_.value)
