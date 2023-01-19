@@ -1293,12 +1293,6 @@ AHK_parse(str) {
                                 }
                         }
                     }
-                    if (left.type=="variable") {
-                        switch left.value, 0 {
-                            case "ComObjCreate":
-                                left.value:="ComObject"
-                        }
-                    }
                     left:={type: "function call", func: left, args: args}
                     c_++
                 case "[":
@@ -2102,6 +2096,26 @@ walker_replacer() {
             k_++
         }
 
+        addToScope(obj, key, varInfo) {
+            t_:=Type(obj) == "Object" ? obj.%key% : obj[key]
+
+            notVar:=t_
+            if (notVar.type == "property access") {
+                while (notVar.type == "property access") {
+                    notVar:=notVar.parent
+                }
+                for _scope in functionScopes {
+                    if (_scope.Has(notVar.value)) {
+                        _scope[do(obj,key)]:=varInfo
+                        break
+                    }
+                }
+            } else {
+                currentScope[t_.value]:=varInfo
+            }
+
+        }
+
         withNewline() {
             switch v_.type {
                 case "command":
@@ -2257,6 +2271,7 @@ walker_replacer() {
                     finalStr.="class " v_.className " "
                     currentScope:=Map()
                     currentScope.CaseSense:="Off"
+                    currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
                     functionScopes.Push(currentScope)
                     functionScopeNames.Push(v_.className)
 
@@ -2385,6 +2400,31 @@ walker_replacer() {
             }
         }
         do(obj, key) {
+
+            checkVarInfoBothPropAcessAndVar(varInfo, obj, key) {
+                switch varInfo.vartype {
+                    case "ReadLine Line":
+                        ; var -> var "`n"
+                        replacement:={left:t_, op:" ", right:{type:"string", value:"``n"}, type:"concat"}
+                        if (Type(obj) == "Object") {
+                            obj.%key%:=replacement
+                        } else {
+                            obj[key]:=replacement
+                        }
+                    case "two param ComObject is Ptr", "ComObjQuery is Ptr":
+                        ; var -> var.Ptr
+                        replacement:={type: "property access", parent: t_, propName: "Ptr"}
+                        if (Type(obj) == "Object") {
+                            obj.%key%:=replacement
+                        } else {
+                            obj[key]:=replacement
+                        }
+                    default:
+                        return false
+                }
+                return true
+            }
+
             t_:=Type(obj) == "Object" ? obj.%key% : obj[key]
             if (Type(t_)=="String") {
                 MsgBox "This Should Never Happen3: " t_
@@ -2408,15 +2448,6 @@ walker_replacer() {
                                 if (_scope.Has(t_.value)) {
                                     varInfo:=_scope[t_.value]
                                     switch varInfo.vartype {
-                                        case "ReadLine Line":
-                                            ; var -> var "`n"
-                                            replacement:={left:t_, op:" ", right:{type:"string", value:"``n"}, type:"concat"}
-                                            if (Type(obj) == "Object") {
-                                                obj.%key%:=replacement
-                                            } else {
-                                                obj[key]:=replacement
-                                            }
-                                            case "ReadLine Line":
                                         case "WinGetList Array":
                                             ; ids -> ids.Length
                                             replacement:={type: "property access", parent: t_, propName: "Length"}
@@ -2460,6 +2491,9 @@ walker_replacer() {
                                         case "rename":
                                             t_.value := varInfo.replaceWith_
                                         default:
+                                            if (checkVarInfoBothPropAcessAndVar(varInfo, obj, key)) {
+                                                break
+                                            }
                                             if (reservedVars.Has(t_.value)) {
                                                 replaceWith_:=defaultReplaceWith:=reservedVars[t_.value]
                                                 iterator:=2
@@ -2520,7 +2554,15 @@ walker_replacer() {
                 case "first var scope":
                     return do(t_, "value")
                 case "property access":
-                    return do(t_, "parent") "." t_.propName
+                    notValueButString:=do(t_, "parent") "." t_.propName
+                    for _scope in functionScopes {
+                        if (_scope.Has(notValueButString)) {
+                            varInfo:=_scope[notValueButString]
+                            checkVarInfoBothPropAcessAndVar(varInfo, obj, key)
+                            break
+                        }
+                    }
+                    return notValueButString
                 case "array access":
                     ;the order of this may cause problems
                     return do(t_, "parent") "[" do(t_, "key") "]"
@@ -2573,10 +2615,28 @@ walker_replacer() {
                 case "post-unary assignment":
                     return do(t_, "left") t_.op
                 case "binary":
+                    doNotTouchLeft:=do(t_, "left")
                     if (t_.op == ":=") {
                         switch t_.right.type {
                             case "string", "concat":
                                 currentScope[do(t_, "left")]:={vartype:"string so StrPtr"}
+                            case "function call":
+                                loop 1 {
+                                    switch t_.right.func.type {
+                                        case "variable":
+                                            switch t_.right.func.value, 0 {
+                                                case "ComObjCreate":
+                                                    if (t_.right.args.Length == 2) {
+                                                        addToScope(t_, "left", {vartype:"two param ComObject is Ptr"})
+                                                        break
+                                                    }
+                                                case "ComObjQuery":
+                                                    addToScope(t_, "left", {vartype:"ComObjQuery is Ptr"})
+                                                    break
+                                                }
+                                    }
+                                    currentScope[do(t_, "left")]:={vartype:"simply defined"}
+                                }
                             default:
                                 currentScope[do(t_, "left")]:={vartype:"simply defined"}
                             ; SubStr too
@@ -2602,7 +2662,7 @@ walker_replacer() {
 
                         }
                     }
-                    return do(t_, "left") " " t_.op " " do(t_, "right")
+                    return doNotTouchLeft " " t_.op " " do(t_, "right")
                 case "comma multi-statement":
                     return do(t_, "left") ", " do(t_, "right")
                 case "ternary":
@@ -2642,6 +2702,8 @@ walker_replacer() {
                                     } else {
                                         obj[key]:=replacement
                                     }
+                                case "ComObjCreate":
+                                    t_.func.value := "ComObject"
                                 case "Func":
                                     var_:=t_.args[1]
                                     var_.value:="%" var_.value "%"
@@ -2734,7 +2796,7 @@ walker_replacer() {
                             switch t_.func.propName, 0 {
                                 case "ReadLine":
                                     if (obj.type == "binary") {
-                                        currentScope[obj.left.value]:={vartype:"ReadLine Line"}
+                                        addToScope(obj.left, "value", {vartype:"ReadLine Line"})
                                     }
                                 case "Length":
                                     replacement:=t_.func
@@ -2956,7 +3018,7 @@ walker_undefinedVars() {
                     finalStr.=indent
                     finalStr.="} "
                 case "class":
-                    currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
+                    ; currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
                     ; this:=3
                     ; MsgBox % this ;3
                 case "function definition":
@@ -3613,7 +3675,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa("Enter::MsgBox hello")
 ; bbb:=aaa('Postmessage,0xB1,0,0,, % "ahk_id " HWndExplanation_Edit')
 ; bbb:=aaa(FileRead("gui.ahk"))
-bbb:=aaa(FileRead("gui2.ahk"))
+; bbb:=aaa(FileRead("gui2.ahk"))
 ; bbb:=aaa(FileRead("IfEqual.ahk"))
 ; bbb:=aaa("IfEqual, Member, InterfaceLuid,               Return this.NET_LUID()")
 ; bbb:=aaa("IfEqual, Member, % ComObjCreate(),               Return this.NET_LUID()")
@@ -3623,6 +3685,7 @@ bbb:=aaa(FileRead("gui2.ahk"))
 ; bbb:=aaa(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
 ; bbb:=aaa(FileRead("toIsFunction.ahk"))
 ; bbb:=aaa(FileRead("StringSplit.ahk"))
+bbb:=aaa(FileRead("two param ComObjCreate and ComObjQuery.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 ; d currentArr
