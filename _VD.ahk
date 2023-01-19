@@ -3,13 +3,15 @@
 ; VD.getDesktopNumOfWindow(wintitle) ;returns 0 for "Show on all desktops"
 
 ; VD.getCount() ;how many virtual desktops you now have
+; VD.getRelativeDesktopNum(anchor_desktopNum, relative_count)
 
 ; VD.goToDesktopNum(desktopNum)
 ; VD.goToDesktopOfWindow(wintitle, activateYourWindow:=true)
+; VD.gotoRelativeDesktopNum(relative_count)
 
 ; VD.MoveWindowToDesktopNum(wintitle, desktopNum)
 ; VD.MoveWindowToCurrentDesktop(wintitle, activateYourWindow:=true)
-; VD.MoveWindowToRelativeDesktopNum(wintitle, relative_desktopNum)
+; VD.MoveWindowToRelativeDesktopNum(wintitle, relative_count)
 
 ; VD.createDesktop(goThere:=true) ; VD.createUntil(howMany, goToLastlyCreated:=true)
 ; VD.removeDesktop(desktopNum, fallback_desktopNum:=false)
@@ -40,9 +42,9 @@
 
 class VD {
 
-    ; #Include VD.ahk
+    ; #Include %A_LineFile%\..\VD.ahk
     ; or
-    ; #Include _VD.ahk
+    ; #Include %A_LineFile%\..\_VD.ahk
     ; ...{startup code}
     ; VD.init()
 
@@ -74,12 +76,14 @@ class VD {
             this._dll_GetCurrentDesktop:=this._dll_GetCurrentDesktop_Win11
             this._dll_GetDesktops:=this._dll_GetDesktops_Win11
             this._dll_SwitchDesktop:=this._dll_SwitchDesktop_Win11
+            this._dll_CreateDesktop:=this._dll_CreateDesktop_Win11
             this._dll_GetName:=this._dll_GetName_Win11
             this.RegisterDesktopNotifications:=this.RegisterDesktopNotifications_Win11
         }
         ;----------------------
         this.IVirtualDesktopManager := ComObjCreate("{AA509086-5CA9-4C25-8F95-589D3C07B48A}", "{A5CD92FF-29BE-454C-8D04-D82879FB3F1B}")
         this.GetWindowDesktopId := this._vtable(this.IVirtualDesktopManager, 4)
+        this.MoveWindowToDesktop := this._vtable(this.IVirtualDesktopManager, 5)
 
         this.IServiceProvider := ComObjCreate("{C2F03A33-21F5-47FA-B4BB-156362A2F239}", "{6D5140C1-7436-11CE-8034-00AA006009FA}")
 
@@ -248,6 +252,17 @@ class VD {
         }
 
     }
+    animationToDesktopNum(desktopNum) { ; Lej77 https://github.com/Grabacr07/VirtualDesktop/pull/23#issuecomment-334918711
+      Gui VD_animation_gui:New, % "-Border -SysMenu +Owner -Caption +HwndVD_animation_gui_hwnd"
+      IVirtualDesktop := this._GetDesktops_Obj().GetAt(desktopNum)
+      GetId:=this._vtable(IVirtualDesktop, 4)
+      VarSetCapacity(GUID_Desktop, 16)
+      DllCall(GetId, "Ptr", IVirtualDesktop, "Ptr", &GUID_Desktop)
+      DllCall(this.MoveWindowToDesktop, "Ptr", this.IVirtualDesktopManager, "Ptr", VD_animation_gui_hwnd, "Ptr", &GUID_Desktop)
+      Gui VD_animation_gui:Show
+      Sleep 100
+      Gui VD_animation_gui:Destroy
+    }
 
     getNameFromDesktopNum(desktopNum) {
         IVirtualDesktop:=this._GetDesktops_Obj().GetAt(desktopNum)
@@ -298,21 +313,12 @@ class VD {
         this._MoveView_to_IVirtualDesktop(thePView, IVirtualDesktop)
     }
 
-    MoveWindowToRelativeDesktopNum(wintitle, relative_desktopNum)
+    getRelativeDesktopNum(anchor_desktopNum, relative_count)
     {
-        found:=this._getFirstValidWindow(wintitle)
-        if (!found) {
-            return -1 ;for false
-        }
-        theHwnd:=found[1]
-        thePView:=found[2]
-
-        desktopNum_ofWindow:=this._desktopNum_from_Hwnd(theHwnd)
-
         Desktops_Obj:=this._GetDesktops_Obj()
         count_Desktops:=Desktops_Obj.GetCount()
 
-        absolute_desktopNum:=desktopNum_ofWindow + relative_desktopNum
+        absolute_desktopNum:=anchor_desktopNum + relative_count
         ;// The 1-based indices wrap around on the first and last desktop.
         ;// say count_Desktops:=3
         absolute_desktopNum:=Mod(absolute_desktopNum, count_Desktops)
@@ -322,10 +328,21 @@ class VD {
             absolute_desktopNum:=absolute_desktopNum + count_Desktops
         }
 
-        IVirtualDesktop:=Desktops_Obj.GetAt(absolute_desktopNum)
-
-        this._MoveView_to_IVirtualDesktop(thePView, IVirtualDesktop)
         return absolute_desktopNum
+    }
+
+    MoveWindowToRelativeDesktopNum(wintitle, relative_count) {
+
+        desktopNum_ofWindow := this.getDesktopNumOfWindow(wintitle)
+        absolute_desktopNum := this.getRelativeDesktopNum(desktopNum_ofWindow, relative_count)
+
+        this.MoveWindowToDesktopNum(wintitle, absolute_desktopNum)
+
+        return absolute_desktopNum
+    }
+
+    gotoRelativeDesktopNum(relative_count) {
+        this.goToDesktopNum(this.getRelativeDesktopNum(this.getCurrentDesktopNum(), relative_count))
     }
 
     MoveWindowToCurrentDesktop(wintitle, activateYourWindow:=true)

@@ -3660,7 +3660,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa("if(true){}else{}")
 ; bbb:=aaa(FileRead("switch.ahk"))
 ; bbb:=aaa(FileRead("switch2.ahk"))
-; bbb:=aaa(FileRead("_VD.ahk"))
+bbb:=aaa(FileRead("_VD.ahk"))
 ; bbb:=aaa("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; bbb:=aaa("[::MsgBox hello")
 ; bbb:=aaa("* & a::MsgBox hello")
@@ -3685,7 +3685,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("A_PtrSize UPtr UInt ternary.ahk"))
 ; bbb:=aaa(FileRead("toIsFunction.ahk"))
 ; bbb:=aaa(FileRead("StringSplit.ahk"))
-bbb:=aaa(FileRead("two param ComObjCreate and ComObjQuery.ahk"))
+; bbb:=aaa(FileRead("two param ComObjCreate and ComObjQuery.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 ; d currentArr
