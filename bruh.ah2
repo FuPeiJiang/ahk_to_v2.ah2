@@ -2812,6 +2812,13 @@ walker_replacer() {
                                     if (t_.args.Length >= 3 && t_.args[3].type == "function call empty arg") {
                                         t_.args[3]:={type:"variable", value:"false"}
                                     }
+                                    ; `Instr("a","b")` -> `("b" == "" || Instr("a", "b"))`
+                                    replacement:={type:"group",value:{left:{left:t_.args[2],op:"==",right:{type:"string",value:""},type:"binary"},op:"||",right:t_,type:"binary"}}
+                                    if (Type(obj) == "Object") {
+                                        obj.%key%:=replacement
+                                    } else {
+                                        obj[key]:=replacement
+                                    }
                             }
                         case "property access":
                             switch t_.func.propName, 0 {
@@ -3681,7 +3688,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa("if(true){}else{}")
 ; bbb:=aaa(FileRead("switch.ahk"))
 ; bbb:=aaa(FileRead("switch2.ahk"))
-bbb:=aaa(FileRead("_VD.ahk"))
+; bbb:=aaa(FileRead("_VD.ahk"))
 ; bbb:=aaa("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; bbb:=aaa("[::MsgBox hello")
 ; bbb:=aaa("* & a::MsgBox hello")
@@ -3708,7 +3715,7 @@ bbb:=aaa(FileRead("_VD.ahk"))
 ; bbb:=aaa(FileRead("StringSplit.ahk"))
 ; bbb:=aaa(FileRead("two param ComObjCreate and ComObjQuery.ahk"))
 ; bbb:=aaa(FileRead("_fixCasingOfPath.ahk"))
-; bbb:=aaa(A_Clipboard)
+bbb:=aaa(A_Clipboard)
 
 ; d currentArr
 ; MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
