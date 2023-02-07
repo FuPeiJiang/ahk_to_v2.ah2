@@ -889,7 +889,7 @@ AHK_parse(str) {
                         argsArr[1].type := "variable"
                         currentArr.Push({type: "function call", func: argsArr[1], args: []})
                     } else {
-                        currentArr.Push({type: "function call", func: {type:"variable", value:"%" argsArr[1].value "%"}, args: []})
+                        currentArr.Push({type: "function call", func: {type:"double-deref", value:argsArr[1]}, args: []})
                     }
                 } else {
                     if (argsArr[1].type=="string") {
@@ -2568,8 +2568,10 @@ walker_replacer() {
                             }
                     }
                     return t_.value
-                case "directive arg", "number", "hex number", "obj key", "double-deref":
+                case "directive arg", "number", "hex number", "obj key":
                     return t_.value
+                case "double-deref":
+                    return "%" do(t_, "value") "%"
                 case "string":
                     return "`"" t_.value "`""
                 case "first var scope":
@@ -2726,18 +2728,22 @@ walker_replacer() {
                                 case "ComObjCreate":
                                     t_.func.value := "ComObject"
                                 case "Func":
-                                    var_:=t_.args[1]
-                                    var_.value:="%" var_.value "%"
-                                    var_.type:="double-deref"
+                                    switch t_.args[1].Type {
+                                        case "string":
+                                            ; `Func("foo")` -> `foo`
+                                            replacement:=string_to_variable_or_prop(t_.args[1].value)
+                                            default:
+                                            ; `Func(strVar)` -> %strVar%
+                                            replacement:={type:"double-deref",value:t_.args[1]}
+                                    }
                                     if (Type(obj) == "Object") {
-                                        obj.%key%:=var_
+                                        obj.%key%:=replacement
                                     } else {
-                                        obj[key]:=var_
+                                        obj[key]:=replacement
                                     }
                                 case "IsFunc":
                                     ; https://www.autohotkey.com/boards/viewtopic.php?style=19&f=13&t=96863#p431844
-                                    var_:=t_.args[1]
-                                    replacement:={args:[{type:"double-deref", value:"%" var_.value "%"}], func:{type:"variable", value:"HasMethod"}, type:"function call"}
+                                    replacement:={args:[{type:"double-deref", value:t_.args[1]}], func:{type:"variable", value:"HasMethod"}, type:"function call"}
                                     ; replacement:={args:[var_], func:{type:"variable", value:"IsSet"}, type:"function call"}
                                     ; {type:"group", value:{}}
                                     if (Type(obj) == "Object") {
@@ -3451,8 +3457,10 @@ what() {
             switch t_.type {
                 case "command empty arg", "function call empty arg":
                     return ""
-                case "variable", "directive arg", "number", "hex number", "obj key", "double-deref":
+                case "variable", "directive arg", "number", "hex number", "obj key":
                     return t_.value
+                case "double-deref":
+                    return "%" do(t_.value) "%"
                 case "string":
                     return "`"" t_.value "`""
                 case "first var scope":
@@ -3715,7 +3723,8 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("StringSplit.ahk"))
 ; bbb:=aaa(FileRead("two param ComObjCreate and ComObjQuery.ahk"))
 ; bbb:=aaa(FileRead("_fixCasingOfPath.ahk"))
-bbb:=aaa(A_Clipboard)
+bbb:=aaa(FileRead("Func.ahk"))
+; bbb:=aaa(A_Clipboard)
 
 ; d currentArr
 ; MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
