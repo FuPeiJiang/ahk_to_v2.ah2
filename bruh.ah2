@@ -2832,7 +2832,9 @@ walker_replacer() {
                                     if (obj.type == "binary") {
                                         addToScope(obj.left, "value", {vartype:"ReadLine Line"})
                                     }
-                                case "Length":
+                                case "Length", "Count":
+                                    ; `.Length()` -> `.Length`
+                                    ; `.Count()` -> `.Count`
                                     replacement:=t_.func
                                     if (Type(obj) == "Object") {
                                         obj.%key%:=replacement
@@ -3696,7 +3698,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa("if(true){}else{}")
 ; bbb:=aaa(FileRead("switch.ahk"))
 ; bbb:=aaa(FileRead("switch2.ahk"))
-; bbb:=aaa(FileRead("_VD.ahk"))
+bbb:=aaa(FileRead("_VD.ahk"))
 ; bbb:=aaa("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; bbb:=aaa("[::MsgBox hello")
 ; bbb:=aaa("* & a::MsgBox hello")
@@ -3723,7 +3725,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("StringSplit.ahk"))
 ; bbb:=aaa(FileRead("two param ComObjCreate and ComObjQuery.ahk"))
 ; bbb:=aaa(FileRead("_fixCasingOfPath.ahk"))
-bbb:=aaa(FileRead("Func.ahk"))
+; bbb:=aaa(FileRead("Func.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 ; d currentArr
