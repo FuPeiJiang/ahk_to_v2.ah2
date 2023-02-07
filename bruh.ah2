@@ -2841,6 +2841,9 @@ walker_replacer() {
                                     } else {
                                         obj[key]:=replacement
                                     }
+                                case "HasKey":
+                                    ; `.HasKey()` -> `.Has()`
+                                    t_.func.propName:="Has"
                                 case "SetCapacity":
                                     if (t_.args.Length > 1) {
                                         ; Object.SetCapacity(Key, ByteSize)
@@ -2911,6 +2914,15 @@ walker_replacer() {
                             argsStr.=", " do(t_.keys, i_) ":" do(t_.values, i_)
                             i_++
                         }
+                    } else {
+                        ; {} -> Map()
+                        replacement:={args:[],func:{type:"variable",value:"Map"},type:"function call"}
+                        if (Type(obj) == "Object") {
+                            obj.%key%:=replacement
+                        } else {
+                            obj[key]:=replacement
+                        }
+                        return do(obj,key)
                     }
                     return "{" argsStr "}"
                 case "array":
