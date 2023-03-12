@@ -1337,6 +1337,9 @@ AHK_parse(str) {
                         char2:=SubStr(str, c_ + 1, 1)
                         switch char2 {
                             case "+":
+                                if (InStr(bak_OutputVar_comments.0, "`n", true)) {
+                                    return left
+                                }
                                 c_+=2
                                 skip_comments()
                                 return {type:"post-unary assignment", left:left, op:"++"} ;post-increment
@@ -1349,6 +1352,9 @@ AHK_parse(str) {
                         char2:=SubStr(str, c_ + 1, 1)
                         switch char2 {
                             case "-":
+                                if (InStr(bak_OutputVar_comments.0, "`n", true)) {
+                                    return left
+                                }
                                 c_+=2
                                 skip_comments()
                                 return {type:"post-unary assignment", left:left, op:"--"} ;post-decrement
@@ -3710,7 +3716,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa("if(true){}else{}")
 ; bbb:=aaa(FileRead("switch.ahk"))
 ; bbb:=aaa(FileRead("switch2.ahk"))
-bbb:=aaa(FileRead("_VD.ahk"))
+; bbb:=aaa(FileRead("_VD.ahk"))
 ; bbb:=aaa("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; bbb:=aaa("[::MsgBox hello")
 ; bbb:=aaa("* & a::MsgBox hello")
@@ -3738,6 +3744,7 @@ bbb:=aaa(FileRead("_VD.ahk"))
 ; bbb:=aaa(FileRead("two param ComObjCreate and ComObjQuery.ahk"))
 ; bbb:=aaa(FileRead("_fixCasingOfPath.ahk"))
 ; bbb:=aaa(FileRead("Func.ahk"))
+bbb:=aaa(FileRead("pre-increment.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 ; d currentArr
