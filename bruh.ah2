@@ -517,7 +517,7 @@ AHK_parse(str) {
                     boolArr:=[0]
                 case "Send","SendRaw","SendInput","SendPlay","SendEvent"
                 ,"SendMode", "SetWorkingDir", "SetBatchLines", "ListLines"
-                ,"Goto","Critical", "DetectHiddenWindows","SetTitleMatchMode":
+                ,"Goto","Critical", "DetectHiddenWindows","SetTitleMatchMode","Click":
                     boolArr:=[3]
                 case "CoordMode":
                     boolArr:=[2,3]
@@ -1563,6 +1563,8 @@ AHK_parse(str) {
                             c1:=cBakComments + pos
                             backtrack_for_hotkey:=0
                             return left
+                        } else {
+                            return ""
                         }
                     }
                     if (right.type == "binary" && orderOfOperations[right.op] > orderOfOperations[op]) {
@@ -1601,8 +1603,7 @@ AHK_parse(str) {
             currentArr.RemoveAt(currentArr.Length - blockArr.Length + 1, blockArr.Length)
             labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
             hotkeyBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
-            currentArr[currentArr.Length] := {type: "function definition", func: {type:"variable", value:currentArr[currentArr.Length].labelName}, args:[]}
-            currentArr.Push({type:"block", statements:blockArr})
+            currentArr[currentArr.Length] := {type:"function definition",func:{type:"variable",value:currentArr[currentArr.Length].labelName},args:[],body:{type:"block",statements:blockArr}}
         } else if (hotkeyBlockStart <= currentArr.Length && (OutputVar_varName.0="return" || OutputVar_varName.0="exitapp")) {
             if (OutputVar_varName.0="exitapp") {
                 add_command("ExitApp", [])
@@ -1642,6 +1643,10 @@ string_to_variable_or_prop(str) {
     }
     return parent
 }
+
+HeaderCommands:=Map()
+HeaderCommands.CaseSense:="Off"
+HeaderCommands.Set("#SingleInstance",1,"ListLines",1,"SendMode",1,"SetWorkingDir",1,"KeyHistory",1)
 
 superGlobalVarsMap:=Map()
 superGlobalVarsMap.CaseSense:="Off"
@@ -2263,6 +2268,9 @@ walker_replacer() {
                     }
                     finalStr.="`n"
                 case "hotkey":
+                    if (k_ + 1 <= statements.Length && statements[k_ + 1].type == "block") {
+                        globalFunctionIndices.Push(k_ + 1)
+                    }
                     finalStr.=v_.keyName
                 case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
                 , "comma multi-statement", "concat":
@@ -2961,20 +2969,27 @@ walker_undefinedVars() {
     takesIndices(globalFunctionIndices, currentArr)
     takesIndices(notCurrentIndices, notCurrentArr) {
         for i_ in notCurrentIndices {
-            blockObj:=notCurrentArr[i_].body
+            if (notCurrentArr[i_].type=="block") {
+                blockObj:=notCurrentArr[i_]
+            } else {
+                blockObj:=notCurrentArr[i_].body
+            }
             _currentIndices:=[]
 
             currentScope:=Map()
             currentScope.CaseSense:="Off"
             functionScopes.Push(currentScope)
 
-            ;parameters are also declared variables
-            for param in notCurrentArr[i_].args {
-                switch param.type {
-                    case "variable":
-                        currentScope[param.value]:={vartype:"simply defined"}
-                    case "binary":
-                        currentScope[param.left.value]:={vartype:"simply defined"}
+
+            if (notCurrentArr[i_].type=="function definition") {
+                ;parameters are also declared variables
+                for param in notCurrentArr[i_].args {
+                    switch param.type {
+                        case "variable":
+                            currentScope[param.value]:={vartype:"simply defined"}
+                        case "binary":
+                            currentScope[param.left.value]:={vartype:"simply defined"}
+                    }
                 }
             }
 
@@ -3006,6 +3021,24 @@ walker_undefinedVars() {
                     }
                 }
                 blockObj.statements.InsertAt(1, {type:"var scope declaration", value: "global"}, left)
+
+                toInsert:=[]
+                for k_ in undefinedVarsMap {
+                    if (!superGlobalVarsMap.Has(k_)) {
+                        superGlobalVarsMap[k_]:=k_
+                        toInsert.Push({left:{type:"variable",value:k_},op:":=",right:{type:"string",value:""},type:"binary"})
+                    }
+                }
+                if (toInsert.Length) {
+                    for insertIdx, obj in currentArr {
+                        if (obj.type == "command" && HeaderCommands.Has(obj._name)) {
+                        } else {
+                            currentArr.InsertAt(insertIdx, toInsert*)
+                            break
+                        }
+                    }
+                }
+
 
             }
             currentScope:=functionScopes.Pop()
@@ -3183,6 +3216,7 @@ walker_undefinedVars() {
                 case "pre-unary":
                     return t_.op do(t_, "right")
                 case "v2 pre-unary": ;assume only &
+                    doNotTouchRight:=do(t_, "right")
                     switch t_.right.type {
                         case "variable":
                             currentScope[t_.right.value]:={vartype:"simply defined"}
@@ -3192,16 +3226,17 @@ walker_undefinedVars() {
                                 currentScope[left_.value]:={vartype:"simply defined"}
                             }
                     }
-                    return t_.op do(t_, "right")
+                    return t_.op doNotTouchRight
                 case "post-unary assignment":
                     return do(t_, "left") t_.op
                 case "binary":
+                    doNotTouchRight:=do(t_, "right")
                     if (t_.op==":=") {
                         if (t_.left.type=="variable") {
                             currentScope[t_.left.value]:={vartype:"simply defined"}
                         }
                     }
-                    return do(t_, "left") " " t_.op " " do(t_, "right")
+                    return do(t_, "left") " " t_.op " " doNotTouchRight
                 case "comma multi-statement":
                     return do(t_, "left") ", " do(t_, "right")
                 case "ternary":
@@ -3284,7 +3319,7 @@ what() {
                 case "hotkey":
                     finalStr.=v_.keyName
                 case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
-                , "comma multi-statement", "concat":
+                , "comma multi-statement", "concat", "variable":
                     finalStr.=do(v_) "`n"
                 case "var scope declaration":
                     finalStr.=v_.value " "
@@ -3744,8 +3779,10 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("two param ComObjCreate and ComObjQuery.ahk"))
 ; bbb:=aaa(FileRead("_fixCasingOfPath.ahk"))
 ; bbb:=aaa(FileRead("Func.ahk"))
-bbb:=aaa(FileRead("pre-increment.ahk"))
+; bbb:=aaa(FileRead("pre-increment.ahk"))
+bbb:=aaa(FileRead("askForHelp1.ahk"))
 ; bbb:=aaa(A_Clipboard)
+
 
 ; d currentArr
 ; MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
