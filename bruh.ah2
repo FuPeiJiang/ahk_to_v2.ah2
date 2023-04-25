@@ -366,9 +366,15 @@ AHK_parse(str) {
                                 skip_comments()
                             }
                         } else {
-                            ;assignment
-                            c_:=c1
-                            skip_expression()
+                            if (OutputVar_operator.0=="=") {
+                                c_++
+                                out_v1str:=skip_v1str_noNeedToEscapeComma()
+                                currentArr.Push({type:"binary",op:":=",left:{type:"variable",value: OutputVar_varName.0},right:v1str_to_expression(out_v1str)})
+                            } else {
+                                ;assignment
+                                c_:=c1
+                                skip_expression()
+                            }
                         }
 
                 }
@@ -453,24 +459,27 @@ AHK_parse(str) {
                             case "":
                                 break
                             case "%":
+                                OutputVar_comments_bak:="" ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+
                                 ; expression only if followed by a \s, yes, \n works too
                                 char_:=SubStr(str, c_ + 1, 1)
                                 if (char_~="\s") {
                                     ; expression
                                     c_+=2
                                     toPush:=value_expression()
-                                    if (aHotkeyWasFound) {
-                                        break
-                                    }
-                                    if (InStr(OutputVar_comments.0, "`n", true)) {
-                                        break
-                                    }
+                                    OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                                 } else {
                                     ; v1str MsgBox %var%
                                     out_v1str:=skip_v1str_noNeedToEscapeComma()
+                                    OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                                     toPush:=v1str_to_expression(out_v1str)
                                 }
-                                skip_comments()
+                                if (aHotkeyWasFound) {
+                                    break
+                                }
+                                if (InStr(OutputVar_comments_bak.0, "`n", true)) {
+                                    break
+                                }
                                 continue
                             case ",":
                                 c_++
@@ -486,7 +495,7 @@ AHK_parse(str) {
 
                         cBak:=c_
                         out_v1str:=skip_v1str_commaDelim()
-                        OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+                        OutputVar_comments_bak:="" ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                         if (out_v1str~="^(?![.+]$)\+?\d*(?:\.\d*)?$") { ;regex: number
                             toPush:={type: "number", value: out_v1str}
                         } else if (argsArr.Length==1 || argsArr.Length==2) {
@@ -517,9 +526,10 @@ AHK_parse(str) {
                     boolArr:=[0]
                 case "Send","SendRaw","SendInput","SendPlay","SendEvent"
                 ,"SendMode", "SetWorkingDir", "SetBatchLines", "ListLines"
-                ,"Goto","Critical", "DetectHiddenWindows","SetTitleMatchMode","Click":
+                ,"Goto","Critical", "DetectHiddenWindows","SetTitleMatchMode","Click"
+                ,"FileDelete":
                     boolArr:=[3]
-                case "CoordMode":
+                case "CoordMode","UrlDownloadToFile":
                     boolArr:=[2,3]
                 case "ToolTip":
                     boolArr:=[2,0,0,0]
@@ -730,7 +740,7 @@ AHK_parse(str) {
                     }
                 case "SplitPath":
                     boolArr:=[0,1,1,1,1,1]
-                case "Sort":
+                case "Sort","FileRead":
                     boolArr:=[0,3]
                 case "PostMessage":
                     boolArr:=[0,0,0,2,2,2,2,3]
@@ -740,6 +750,10 @@ AHK_parse(str) {
                     boolArr:=[0,2]
                 case "StringSplit":
                     boolArr:=[0,0,2,3]
+                case "ClipWait":
+                    boolArr:=[0,0]
+                case "StringReplace":
+                    boolArr:=[0,0,2,2,3]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -802,6 +816,7 @@ AHK_parse(str) {
                     switch boolArr[argNum] {
                         case 0:
                             toPush:=value_expression()
+                            OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                         case 1:
                             toPush:={type:"v2 pre-unary", op:"&", right:value_expression()}
                         case 2:
@@ -955,6 +970,19 @@ AHK_parse(str) {
             case "Sort":
                 currentArr.Push({type: "binary", op: ":=", left:argsArr[1], right: {type: "function call", func: {type:"variable"
                 , value:"Sort"}, args: argsArr}})
+            case "FileRead":
+                ; todo: *t -> `n
+                ; todo: *m1024 -> m1024
+                outVar := argsArr.RemoveAt(1)
+                currentArr.Push({type: "binary", op: ":=", left:outVar, right: {type: "function call", func: {type:"variable"
+                , value:"FileRead"}, args: argsArr}})
+            case "StringReplace":
+                outVar:=argsArr.RemoveAt(1)
+                if (argsArr.Length >= 4) {
+                    argsArr.RemoveAt(4)
+                }
+                currentArr.Push({type: "binary", op: ":=", left:outVar, right: {type: "function call", func: {type:"variable"
+                , value:"StrReplace"}, args: argsArr}})
             case "IfEqual","IfNotEqual","IfLess","IfLessOrEqual","IfGreater","IfGreaterOrEqual":
                 char3:=SubStr(str, c_, 1)
                 switch char3 {
@@ -977,6 +1005,14 @@ AHK_parse(str) {
                     }
                 }
                 add_command("DetectHiddenWindows", argsArr)
+            case "UrlDownloadToFile":
+                add_command("Download", argsArr)
+            case "ClipWait":
+                ; Specifying 0 is the same as specifying 0.5
+                if (argsArr.Length >= 1 && argsArr[1].value == "0") {
+                    argsArr[1].value:="0.5"
+                }
+                add_command("ClipWait", argsArr)
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -1027,16 +1063,16 @@ AHK_parse(str) {
 
         ret_v1str:=""
         while (true) {
-            RegExMatch(str, "\S+(?:[ \t]+[^; \t]\S*)*", &OutputVar_v1str, c_)
+            RegExMatch(str, "[ \t]*([^\s\n]*([ \t]+[^; \t][^\s]*)*)", &OutputVar_v1str, c_)
             if (A_Index > 1) {
-                if (InStr(OutputVar_v1str.0, "::", true)) {
+                if (InStr(OutputVar_v1str.1, "::", true)) {
                     aHotkeyWasFound:=backtrack_for_hotkey:=c_
                     return ret_v1str
                 }
                 ret_v1str.=" "
             }
-            ret_v1str.=OutputVar_v1str.0
-            c_+=OutputVar_v1str.Len
+            ret_v1str.=OutputVar_v1str.1
+            c_+=OutputVar_v1str.Len[1]
             skip_comments()
             char_nl:=SubStr(str, c_, 1)
             switch char_nl {
@@ -1259,7 +1295,7 @@ AHK_parse(str) {
                     RegExMatch(str, "(?![.+]$)\+?\d*(?:\.\d*)?", &OutputVar_variableNameWhat, c_)
                     if (OutputVar_variableNameWhat.Len == 0) {
                         ; found nothing, attempt hotkey
-                        RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|?()\[\]{}\. a-zA-Z0-9_#@$]*?::", &OutputVar_attemptHotkey, c_)
+                        RegExMatch(str, "(*COMMIT)[!&*+\-.\/:<=>^|?()\[\]{}\. a-zA-Z0-9_#@$]*?::", &OutputVar_attemptHotkey, c_)
                         if (OutputVar_attemptHotkey && SubStr(OutputVar_attemptHotkey.0, -2)=="::") {
                             aHotkeyWasFound:=backtrack_for_hotkey:=c_ + OutputVar_attemptHotkey.Len
                             return ""
@@ -1684,6 +1720,11 @@ superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"StrPtr",{vartype:"simply defined"}
     ,"InStr",{vartype:"simply defined"}
     ,"StrGet",{vartype:"simply defined"}
+    ,"ClipboardAll",{vartype:"simply defined"}
+    ,"FileRead",{vartype:"simply defined"}
+    ,"RegExMatch",{vartype:"simply defined"}
+    ,"RegExReplace",{vartype:"simply defined"}
+    ,"StrReplace",{vartype:"simply defined"}
 )
 
 walker_superGlobalVars() {
@@ -2476,6 +2517,13 @@ walker_replacer() {
                             t_.value:="A_LoopFileFullPath"
                         case "Clipboard":
                             t_.value:="A_Clipboard"
+                        case "ClipboardAll":
+                            replacement:={args:[],func:{type:"variable",value:"ClipboardAll"},type:"function call"}
+                            if (Type(obj) == "Object") {
+                                obj.%key%:=replacement
+                            } else {
+                                obj[key]:=replacement
+                            }
                         case "Comspec":
                             t_.value:="A_ComSpec"
                         default:
@@ -2576,6 +2624,16 @@ walker_replacer() {
                                                 } else {
                                                     obj[key]:=replacement
                                                 }
+                                            }
+                                        case "RegexMatch root":
+                                            integerOnTheRight:=SubStr(t_.value, StrLen(rtrimmedIntegers) + 1)
+                                            ; o0 -> o.0
+                                            ; o1 -> o.1
+                                            replacement:={type:"property access",parent:{type:"variable",value:rtrimmedIntegers},propName:integerOnTheRight}
+                                            if (Type(obj) == "Object") {
+                                                obj.%key%:=replacement
+                                            } else {
+                                                obj[key]:=replacement
                                             }
                                     }
                                 }
@@ -2838,6 +2896,12 @@ walker_replacer() {
                                         obj.%key%:=replacement
                                     } else {
                                         obj[key]:=replacement
+                                    }
+                                case "RegexMatch":
+                                    if (t_.args.Length >= 3) {
+                                        outVarName:=t_.args[3].value
+                                        currentScope[outVarName]:={vartype:"RegexMatch root"}
+                                        t_.args[3] := {type:"v2 pre-unary", op:"&", right:t_.args[3]}
                                     }
                             }
                         case "property access":
@@ -3216,7 +3280,6 @@ walker_undefinedVars() {
                 case "pre-unary":
                     return t_.op do(t_, "right")
                 case "v2 pre-unary": ;assume only &
-                    doNotTouchRight:=do(t_, "right")
                     switch t_.right.type {
                         case "variable":
                             currentScope[t_.right.value]:={vartype:"simply defined"}
@@ -3226,7 +3289,7 @@ walker_undefinedVars() {
                                 currentScope[left_.value]:={vartype:"simply defined"}
                             }
                     }
-                    return t_.op doNotTouchRight
+                    return t_.op do(t_, "right")
                 case "post-unary assignment":
                     return do(t_, "left") t_.op
                 case "binary":
@@ -3780,7 +3843,8 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("_fixCasingOfPath.ahk"))
 ; bbb:=aaa(FileRead("Func.ahk"))
 ; bbb:=aaa(FileRead("pre-increment.ahk"))
-bbb:=aaa(FileRead("askForHelp1.ahk"))
+; bbb:=aaa(FileRead("askForHelp1.ahk"))
+bbb:=aaa(FileRead("GooglePhraseFix.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
