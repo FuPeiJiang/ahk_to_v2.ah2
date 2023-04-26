@@ -1701,6 +1701,7 @@ superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"A_Space",{vartype:"simply defined"}
     ,"A_Args",{vartype:"simply defined"}
     ,"A_PtrSize",{vartype:"simply defined"}
+    ,"A_Clipboard",{vartype:"simply defined"}
     ,"ErrorLevel",{vartype:"simply defined"}
     ; bool
     ,"True",{vartype:"simply defined"}
@@ -2573,6 +2574,19 @@ walker_replacer() {
                                             }
                                         case "rename":
                                             t_.value := varInfo.replaceWith_
+                                        case "RegexMatch root uninitialized":
+                                            varInfo.vartype := "RegexMatch root"
+                                            break
+                                        case "RegexMatch root":
+                                            ; o -> o.0
+                                            replacement:={type:"property access",parent:{type:"variable",value:rtrimmedIntegers},propName:"0"}
+                                            if (Type(obj) == "Object") {
+                                                obj.%key%:=replacement
+                                            } else {
+                                                obj[key]:=replacement
+                                            }
+                                            t_.value := t_.value ".0"
+                                            break
                                         default:
                                             if (checkVarInfoBothPropAcessAndVar(varInfo, obj, key)) {
                                                 break
@@ -2627,7 +2641,6 @@ walker_replacer() {
                                             }
                                         case "RegexMatch root":
                                             integerOnTheRight:=SubStr(t_.value, StrLen(rtrimmedIntegers) + 1)
-                                            ; o0 -> o.0
                                             ; o1 -> o.1
                                             replacement:={type:"property access",parent:{type:"variable",value:rtrimmedIntegers},propName:integerOnTheRight}
                                             if (Type(obj) == "Object") {
@@ -2635,6 +2648,7 @@ walker_replacer() {
                                             } else {
                                                 obj[key]:=replacement
                                             }
+                                            t_.value := t_.value "." integerOnTheRight
                                     }
                                 }
                             }
@@ -2711,10 +2725,11 @@ walker_replacer() {
                     return do(t_, "left") t_.op
                 case "binary":
                     doNotTouchLeft:=do(t_, "left")
+                    doNotTouchRight:=do(t_, "right")
                     if (t_.op == ":=") {
                         switch t_.right.type {
                             case "string", "concat":
-                                currentScope[do(t_, "left")]:={vartype:"string so StrPtr"}
+                                currentScope[doNotTouchLeft]:={vartype:"string so StrPtr"}
                             case "function call":
                                 loop 1 {
                                     switch t_.right.func.type {
@@ -2730,10 +2745,10 @@ walker_replacer() {
                                                     break
                                                 }
                                     }
-                                    currentScope[do(t_, "left")]:={vartype:"simply defined"}
+                                    currentScope[doNotTouchLeft]:={vartype:"simply defined"}
                                 }
                             default:
-                                currentScope[do(t_, "left")]:={vartype:"simply defined"}
+                                currentScope[doNotTouchLeft]:={vartype:"simply defined"}
                             ; SubStr too
                         }
                         switch t_.left.type {
@@ -2757,7 +2772,7 @@ walker_replacer() {
 
                         }
                     }
-                    return doNotTouchLeft " " t_.op " " do(t_, "right")
+                    return doNotTouchLeft " " t_.op " " doNotTouchRight
                 case "comma multi-statement":
                     return do(t_, "left") ", " do(t_, "right")
                 case "ternary":
@@ -2900,7 +2915,7 @@ walker_replacer() {
                                 case "RegexMatch":
                                     if (t_.args.Length >= 3) {
                                         outVarName:=t_.args[3].value
-                                        currentScope[outVarName]:={vartype:"RegexMatch root"}
+                                        currentScope[outVarName]:={vartype:"RegexMatch root uninitialized"}
                                         t_.args[3] := {type:"v2 pre-unary", op:"&", right:t_.args[3]}
                                     }
                             }
