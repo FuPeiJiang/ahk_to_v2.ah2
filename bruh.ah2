@@ -2735,7 +2735,7 @@ walker_replacer() {
                                     switch t_.right.func.type {
                                         case "variable":
                                             switch t_.right.func.value, 0 {
-                                                case "ComObjCreate":
+                                                case "ComObject":
                                                     if (t_.right.args.Length == 2) {
                                                         addToScope(t_, "left", {vartype:"two param ComObject is Ptr"})
                                                         break
@@ -2743,7 +2743,11 @@ walker_replacer() {
                                                 case "ComObjQuery":
                                                     addToScope(t_, "left", {vartype:"ComObjQuery is Ptr"})
                                                     break
-                                                }
+                                                case "WinGetList":
+                                                    currentScope[t_.left.value]:={vartype:"WinGetList Array"}
+                                                    currentScope[t_.left.value "%A_Index%"]:={vartype:"WinGetList Element"}
+                                                    break
+                                            }
                                     }
                                     currentScope[doNotTouchLeft]:={vartype:"simply defined"}
                                 }
@@ -2896,11 +2900,6 @@ walker_replacer() {
                                 case "RegisterCallback":
                                     t_.func.value:="CallbackCreate"
                                     t_.args[1]:=string_to_variable_or_prop(t_.args[1].value)
-                                case "WinGetList":
-                                    if (obj.type == "binary") {
-                                        currentScope[obj.left.value]:={vartype:"WinGetList Array"}
-                                        currentScope[obj.left.value "%A_Index%"]:={vartype:"WinGetList Element"}
-                                    }
                                 case "InStr":
                                     if (t_.args.Length >= 3 && t_.args[3].type == "function call empty arg") {
                                         t_.args[3]:={type:"variable", value:"false"}
