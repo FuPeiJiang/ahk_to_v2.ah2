@@ -180,7 +180,7 @@ AHK_parse(str) {
                     }
                 }
                 _catchStatemement() {
-                    if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "try with block") {
+                    if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 1].type == "try with block") {
                         currentArr[currentArr.Length].type:="block before catch"
                     }
                     skip_comments()
@@ -189,6 +189,22 @@ AHK_parse(str) {
                         currentArr.Push({type:"catch with block"})
                     } else {
                         currentArr.Push({type:"catch without block"})
+                    }
+                }
+                whileStatemement() {
+                    ; while statement
+                    skip_comments()
+                    toPush:=value_expression()
+                    if (toPush.type == "variable") {
+                        toPush:={type: "group", value: toPush}
+                    }
+                    char_:=SubStr(str, c_, 1)
+                    if (char_=="{") {
+                        currentArr.Push({type:"while with block"})
+                        currentArr.Push({type: "condition with block",expr:toPush})
+                    } else {
+                        currentArr.Push({type:"while without block"})
+                        currentArr.Push(toPush)
                     }
                 }
                 commandStatement() {
@@ -330,11 +346,14 @@ AHK_parse(str) {
                         }
                     case "(":
                         ; function call
-                        if (OutputVar_varName.0="if") {
-                            ifStatemement()
-                        } else {
-                            c_:=c1
-                            skip_expression()
+                        switch (OutputVar_varName.0), 0 {
+                            case "if":
+                                ifStatemement()
+                            case "while":
+                                whileStatemement()
+                            default:
+                                c_:=c1
+                                skip_expression()
                         }
                     case "[", ".":
                         ; array access, property
@@ -568,6 +587,8 @@ AHK_parse(str) {
                     }
 
                     boolArr:=[0]
+                case "Throw":
+                    boolArr:=[0]
                 case "Process":
                     ; boolArr:=[0,0,3]
                     boolArr:=[2,0,3]
@@ -590,6 +611,18 @@ AHK_parse(str) {
                         currentArr.Push({type:"try with block"})
                     } else {
                         currentArr.Push({type:"try without block"})
+                    }
+                    return
+                case "catch":
+                    if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 1].type == "try with block") {
+                        currentArr[currentArr.Length].type:="block before catch"
+                    }
+                    skip_comments()
+                    char_:=SubStr(str, c_, 1)
+                    if (char_=="{") {
+                        currentArr.Push({type:"catch with block"})
+                    } else {
+                        currentArr.Push({type:"catch without block"})
                     }
                     return
                 case "Run", "RunWait":
@@ -620,6 +653,7 @@ AHK_parse(str) {
                     return
                 case "loop":
                     char_:=SubStr(str, c_, 1)
+                    loopExtend:=""
                     switch char_ {
                         case "%":
                             ; expression only if followed by a \s, yes, \n works too
@@ -628,11 +662,11 @@ AHK_parse(str) {
                                 ; expression
                                 c_+=2
                                 skip_comments()
-                                toPush:=value_expression()
+                                argsArr:=[value_expression()]
                             } else {
                                 RegExMatch(str, "[^\s{,]+(?:[ \t]+[^; \t{,][^\s{,]*)*", &OutputVar_v1str, c_)
                                 c_+=OutputVar_v1str.Len
-                                toPush:=v1str_to_expression(OutputVar_v1str.0)
+                                argsArr:=[v1str_to_expression(OutputVar_v1str.0)]
                                 skip_comments()
                             }
                         case "{":
@@ -649,12 +683,25 @@ AHK_parse(str) {
                             ; skip_v1str_commaBracketDelim()
                             RegExMatch(str, "[^\s{,]+(?:[ \t]+[^; \t{,][^\s{,]*)*", &OutputVar_v1str, c_)
                             c_+=OutputVar_v1str.Len
-                            if (IsInteger(OutputVar_v1str.0)) {
-                                toPush:={type: "number", value: Integer(OutputVar_v1str.0)}
-                            } else {
-                                toPush:={type: "number", value: 0}
+                            loop 1 {
+                                switch (OutputVar_v1str.0), 0 {
+                                    case "Parse":
+                                        loopExtend:="Parse"
+                                        boolArr:=[0,3,4]
+                                    default:
+                                        if (IsInteger(OutputVar_v1str.0)) {
+                                            argsArr:=[{type: "number", value: Integer(OutputVar_v1str.0)}]
+                                        } else {
+                                            argsArr:=[{type: "number", value: 0}]
+                                        }
+                                        skip_comments()
+                                        break
+                                }
+                                skip_comments()
+                                ++c_
+                                skip_comments()
+                                argsFromBoolArr()
                             }
-                            skip_comments()
 
                     }
                     ;the label is a loop label, not a label: return pair
@@ -663,11 +710,11 @@ AHK_parse(str) {
                     }
                     char_:=SubStr(str, c_, 1)
                     if (char_=="{") {
-                        currentArr.Push({type:"loop with block2"})
-                        currentArr.Push({type: "condition with block",expr:toPush})
+                        currentArr.Push({type:"loop with block2",loopExtend:loopExtend})
+                        currentArr.Push({type: "argsArr with block",argsArr:argsArr})
                     } else {
-                        currentArr.Push({type:"loop without block"})
-                        currentArr.Push({type: "condition without block", expr: toPush})
+                        currentArr.Push({type:"loop without block",loopExtend:loopExtend})
+                        currentArr.Push({type: "argsArr without block", argsArr:argsArr})
                     }
                     return
                 case "WinActivate", "WinHide"
@@ -742,6 +789,8 @@ AHK_parse(str) {
                     boolArr:=[0,1,1,1,1,1]
                 case "Sort","FileRead":
                     boolArr:=[0,3]
+                case "Random","StringTrimLeft","StringTrimRight":
+                    boolArr:=[0,0,0]
                 case "PostMessage":
                     boolArr:=[0,0,0,2,2,2,2,3]
                 case "SendMessage":
@@ -750,10 +799,14 @@ AHK_parse(str) {
                     boolArr:=[0,2]
                 case "StringSplit":
                     boolArr:=[0,0,2,3]
-                case "ClipWait":
-                    boolArr:=[0,0]
                 case "StringReplace":
                     boolArr:=[0,0,2,2,3]
+                case "StringLower", "StringUpper":
+                    boolArr:=[0,0,3]
+                case "ClipWait":
+                    boolArr:=[0,0]
+                case "FileAppend":
+                    boolArr:=[2,2,3]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -763,80 +816,83 @@ AHK_parse(str) {
                     add_hotkey()
                     return
                 }
-                argNum:=1
-                loop {
-                    char_:=SubStr(str, c_, 1)
-                    switch char_ {
-                        case "":
-                            break
-                        case "%":
-                            ; expression only if followed by a \s, yes, \n works too
-                            char_:=SubStr(str, c_ + 1, 1)
-                            if (char_~="\s") {
-                                ; expression
-                                c_+=2
-                                skip_comments()
-                                toPush:=value_expression()
-                                if (InStr(OutputVar_comments.0, "`n", true)) {
-                                    break
-                                }
-                                if (argNum == boolArr.Length) {
-                                    break
-                                }
-                            } else {
-                                ; v1str MsgBox %var%
-                                if (argNum == boolArr.Length) {
-                                    out_v1str:=skip_v1str_noNeedToEscapeComma()
-                                    toPush:=v1str_to_expression(out_v1str)
-                                    break
-                                } else {
-                                    out_v1str:=skip_v1str_commaDelim()
-                                    OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
-                                    toPush:=v1str_to_expression(out_v1str)
-                                    OutputVar_comments:=OutputVar_comments_bak ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+                argsFromBoolArr() {
+                    argNum:=1
+                    loop {
+                        char_:=SubStr(str, c_, 1)
+                        switch char_ {
+                            case "":
+                                break
+                            case "%":
+                                ; expression only if followed by a \s, yes, \n works too
+                                char_:=SubStr(str, c_ + 1, 1)
+                                if (char_~="\s") {
+                                    ; expression
+                                    c_+=2
+                                    skip_comments()
+                                    toPush:=value_expression()
                                     if (InStr(OutputVar_comments.0, "`n", true)) {
                                         break
                                     }
                                     if (argNum == boolArr.Length) {
                                         break
                                     }
+                                } else {
+                                    ; v1str MsgBox %var%
+                                    if (argNum == boolArr.Length) {
+                                        out_v1str:=skip_v1str_noNeedToEscapeComma()
+                                        toPush:=v1str_to_expression(out_v1str)
+                                        break
+                                    } else {
+                                        out_v1str:=skip_v1str_commaDelim()
+                                        OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+                                        toPush:=v1str_to_expression(out_v1str)
+                                        OutputVar_comments:=OutputVar_comments_bak ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+                                        if (InStr(OutputVar_comments.0, "`n", true)) {
+                                            break
+                                        }
+                                        if (argNum == boolArr.Length) {
+                                            break
+                                        }
+                                    }
                                 }
-                            }
-                            continue
-                        case ",":
-                            c_++
-                            argNum++
-                            argsArr.Push(toPush ? toPush : {type:"command empty arg"})
-                            toPush:=""
-                            skip_comments()
-                            continue
+                                continue
+                            case ",":
+                                c_++
+                                argNum++
+                                argsArr.Push(toPush ? toPush : {type:"command empty arg"})
+                                toPush:=""
+                                skip_comments()
+                                continue
+                        }
+                        ;v1str
+                        OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+                        switch boolArr[argNum] {
+                            case 0:
+                                toPush:=value_expression()
+                                OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+                            case 1:
+                                toPush:={type:"v2 pre-unary", op:"&", right:value_expression()}
+                            case 2:
+                                out_v1str:=skip_v1str_commaDelim()
+                                OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+                                toPush:=v1str_to_expression(out_v1str)
+                            case 3:
+                                out_v1str:=skip_v1str_noNeedToEscapeComma()
+                                OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+                                toPush:=v1str_to_expression(out_v1str)
+                        }
+                        OutputVar_comments:=OutputVar_comments_bak ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
+                        if (InStr(OutputVar_comments.0, "`n", true)) {
+                            break
+                        }
+                        if (argNum == boolArr.Length) {
+                            break
+                        }
                     }
-                    ;v1str
-                    OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
-                    switch boolArr[argNum] {
-                        case 0:
-                            toPush:=value_expression()
-                            OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
-                        case 1:
-                            toPush:={type:"v2 pre-unary", op:"&", right:value_expression()}
-                        case 2:
-                            out_v1str:=skip_v1str_commaDelim()
-                            OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
-                            toPush:=v1str_to_expression(out_v1str)
-                        case 3:
-                            out_v1str:=skip_v1str_noNeedToEscapeComma()
-                            OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
-                            toPush:=v1str_to_expression(out_v1str)
-                    }
-                    OutputVar_comments:=OutputVar_comments_bak ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
-                    if (InStr(OutputVar_comments.0, "`n", true)) {
-                        break
-                    }
-                    if (argNum == boolArr.Length) {
-                        break
-                    }
+                    argsArr.Push(toPush ? toPush : {type:"command empty arg"})
                 }
-                argsArr.Push(toPush ? toPush : {type:"command empty arg"})
+                argsFromBoolArr()
                 break bruh
 
         }
@@ -970,6 +1026,9 @@ AHK_parse(str) {
             case "Sort":
                 currentArr.Push({type: "binary", op: ":=", left:argsArr[1], right: {type: "function call", func: {type:"variable"
                 , value:"Sort"}, args: argsArr}})
+            case "Random":
+                currentArr.Push({type: "binary", op: ":=", left:argsArr.RemoveAt(1), right: {type: "function call", func: {type:"variable"
+                , value:"Random"}, args: argsArr}})
             case "FileRead":
                 ; todo: *t -> `n
                 ; todo: *m1024 -> m1024
@@ -983,6 +1042,25 @@ AHK_parse(str) {
                 }
                 currentArr.Push({type: "binary", op: ":=", left:outVar, right: {type: "function call", func: {type:"variable"
                 , value:"StrReplace"}, args: argsArr}})
+            case "StringTrimRight":
+                currentArr.Push({type: "binary", op: ":=", left:argsArr[1], right: {type: "function call", func: {type:"variable"
+                , value:"SubStr"}, args: [argsArr[2],{type:"number",value:1},{type:"pre-unary",op:"-",right:argsArr[3]}]}})
+            case "StringTrimLeft":
+                if (argsArr[3].type != "number") {
+                    MsgBox "StringTrimLeft of not const number not implemented"
+                }
+                currentArr.Push({type: "binary", op: ":=", left:argsArr[1], right: {type: "function call", func: {type:"variable"
+                , value:"SubStr"}, args: [argsArr[2],{type:"number",value:1+argsArr[3].value}]}})
+            case "StringLower":
+                funcName:=((argsArr.Length > 2 && argsArr[2].type=="string" && argsArr[2].value="T")
+                ? "StrLower" : "StrTitle")
+                currentArr.Push({type: "binary", op: ":=", left:argsArr[1], right: {type: "function call", func: {type:"variable"
+                , value:funcName}, args: [argsArr[2]]}})
+            case "StringUpper":
+                funcName:=((argsArr.Length > 2 && argsArr[2].type=="string" && argsArr[2].value="T")
+                ? "StrUpper" : "StrTitle")
+                currentArr.Push({type: "binary", op: ":=", left:argsArr[1], right: {type: "function call", func: {type:"variable"
+                , value:funcName}, args: [argsArr[2]]}})
             case "IfEqual","IfNotEqual","IfLess","IfLessOrEqual","IfGreater","IfGreaterOrEqual":
                 char3:=SubStr(str, c_, 1)
                 switch char3 {
@@ -1115,7 +1193,7 @@ AHK_parse(str) {
         return toPush
     }
 
-    value_expression() {
+    value_expression(op:="") {
         ; hotkeys are values..
         RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|?()\[\]{}\.]+", &OutputVar_maybeHotkey, c_)
         if (OutputVar_maybeHotkey && SubStr(OutputVar_maybeHotkey.0, -2)=="::") {
@@ -1300,7 +1378,11 @@ AHK_parse(str) {
                             aHotkeyWasFound:=backtrack_for_hotkey:=c_ + OutputVar_attemptHotkey.Len
                             return ""
                         } else {
-                            MsgBox "what is this? parsing number here, c_:" c_
+                            if (op=="*") {
+                                return 0
+                            } else {
+                                MsgBox "what is this? parsing number here, c_:" c_
+                            }
                         }
                     }
                     left:={type: "number", value: OutputVar_variableNameWhat.0}
@@ -1348,6 +1430,11 @@ AHK_parse(str) {
                     c_++
                     skip_comments()
                     left:={type: "array access", parent: left, key: value_expression()}
+                    while ((char_:=SubStr(str, c_, 1))==",") {
+                        c_++
+                        skip_comments()
+                        left:={type: "array access", parent: left, key: value_expression()}
+                    }
                     c_++
                 case ".":
                     ; property access
@@ -1561,7 +1648,7 @@ AHK_parse(str) {
                             aHotkeyWasFound:=backtrack_for_hotkey:=colonPos + 2
                         }
                         return ""
-                    case ",", "", "{", "}", ")":
+                    case ",", "", "{", "}", ")","]":
                         return left
                     case "a":
                         word_:=SubStr(str, c_, 3)
@@ -1593,7 +1680,10 @@ AHK_parse(str) {
                     c_+=StrLen(op)
                     skip_comments()
 
-                    right:=value_expression()
+                    right:=value_expression(op)
+                    if (!right && op=="*") {
+                        return {type:"variadic", left:left, op:"*"}
+                    }
                     if (backtrack_for_hotkey) {
                         if (pos:=InStr(bak_OutputVar_comments.0, "`n", true)) {
                             c1:=cBakComments + pos
@@ -1699,10 +1789,21 @@ superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"A_ScriptFullPath",{vartype:"simply defined"}
     ,"A_ScriptName",{vartype:"simply defined"}
     ,"A_Space",{vartype:"simply defined"}
+    ,"A_tab",{vartype:"simply defined"}
     ,"A_Args",{vartype:"simply defined"}
     ,"A_PtrSize",{vartype:"simply defined"}
     ,"A_Clipboard",{vartype:"simply defined"}
+    ,"A_NowUTC",{vartype:"simply defined"}
+    ,"A_LoopField",{vartype:"simply defined"}
+    ,"A_TitleMatchMode",{vartype:"simply defined"}
+    ,"A_DetectHiddenWindows",{vartype:"simply defined"}
+    ,"A_ScriptHwnd",{vartype:"simply defined"}
+    ,"A_OSVersion",{vartype:"simply defined"}
+    ,"A_ScreenWidth",{vartype:"simply defined"}
+    ,"A_ScreenHeight",{vartype:"simply defined"}
     ,"ErrorLevel",{vartype:"simply defined"}
+    ; deprecated
+    ,"A_StringCaseSense",{vartype:"simply defined"}
     ; bool
     ,"True",{vartype:"simply defined"}
     ,"False",{vartype:"simply defined"}
@@ -1719,6 +1820,7 @@ superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"NumPut",{vartype:"simply defined"}
     ,"HasMethod",{vartype:"simply defined"}
     ,"StrPtr",{vartype:"simply defined"}
+    ,"ObjPtr",{vartype:"simply defined"}
     ,"InStr",{vartype:"simply defined"}
     ,"StrGet",{vartype:"simply defined"}
     ,"ClipboardAll",{vartype:"simply defined"}
@@ -1726,12 +1828,38 @@ superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"RegExMatch",{vartype:"simply defined"}
     ,"RegExReplace",{vartype:"simply defined"}
     ,"StrReplace",{vartype:"simply defined"}
+    ,"isObject",{vartype:"simply defined"}
+    ,"IsSet",{vartype:"simply defined"}
+    ,"StrSplit",{vartype:"simply defined"}
+    ,"Type",{vartype:"simply defined"}
+    ,"Sort",{vartype:"simply defined"}
+    ,"StrTitle",{vartype:"simply defined"}
+    ,"StrUpper",{vartype:"simply defined"}
+    ,"StrLower",{vartype:"simply defined"}
+    ,"Abs",{vartype:"simply defined"}
+    ,"Mod",{vartype:"simply defined"}
+    ,"WinGetStyle",{vartype:"simply defined"}
+    ,"WinGetExStyle",{vartype:"simply defined"}
+    ,"WinGetList",{vartype:"simply defined"}
+    ,"WinGetMinMax",{vartype:"simply defined"}
+    ,"WinGetTitle",{vartype:"simply defined"}
+    ,"WinGetClass",{vartype:"simply defined"}
+    ,"WinGetProcessName",{vartype:"simply defined"}
+    ,"WinExist",{vartype:"simply defined"}
+    ,"OnMessage",{vartype:"simply defined"}
+    ,"ComObjQuery",{vartype:"simply defined"}
+    ,"CallbackCreate",{vartype:"simply defined"}
+    ,"Gui",{vartype:"simply defined"}
+    ,"Map",{vartype:"simply defined"}
+    ,"Error",{vartype:"simply defined"}
+    ,"ObjBindMethod",{vartype:"simply defined"}
+    ,"DateDiff",{vartype:"simply defined"}
 )
 
 walker_superGlobalVars() {
     finalStr:=""
     indent:=""
-
+    classKeysArr:=[]
     do_statements(currentArr)
     return finalStr
 
@@ -1748,177 +1876,25 @@ walker_superGlobalVars() {
 
         withNewline() {
             switch v_.type {
-                case "command":
-                    if (v_.args.Length) {
-                        finalStr.=v_._name " " do(v_.args[1])
-                        i_:=2, len:=v_.args.Length + 1
-                        while (i_<len) {
-                            finalStr.=", " do(v_.args[i_])
-                            i_++
-                        }
-                    } else {
-                        finalStr.=v_._name
-                    }
-                    finalStr.="`n"
-                case "hotkey":
-                    finalStr.=v_.keyName
-                case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
-                , "comma multi-statement":
-                    finalStr.=do(v_) "`n"
-                case "var scope declaration":
-                    finalStr.=v_.value
-                    v_:=statements[++k_]
-                    withNewline()
-                case "class":
-                    v_:=statements[++k_]
-                case "block":
-                    finalStr.="{`n"
-                    indent.="  "
-                    do_statements(v_.statements)
-                    indent:=SubStr(indent, 3)
-                    finalStr.=indent
-                    finalStr.="}`n"
-                case "block before else":
-                    finalStr.="{`n"
-                    indent.="  "
-                    do_statements(v_.statements)
-                    indent:=SubStr(indent, 3)
-                    finalStr.=indent
-                    finalStr.="} "
                 case "function definition":
                     if (v_.func.type=="variable") {
-                        superGlobalVarsMap[v_.func.value]:={vartype:"simply defined"}
-                    }
-                    finalStr.=do(v_) " "
-                    v_:=v_.body
-                    withNewline()
-                case "condition with block":
-                    finalStr.=do(v_.expr) " "
-                case "if with block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "if without block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else with block")) {
-                        finalStr.=indent
-                        v_:=statements[++k_]
-                        withNewline()
-                    }
-                case "while with block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "while without block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "else with block":
-                    finalStr.="else "
-                    v_:=statements[++k_]
-                    withNewline()
-                case "catch with block":
-                    finalStr.="catch "
-                    v_:=statements[++k_]
-                    withNewline()
-                case "else without block":
-                    finalStr.="else"
-                    finalStr.="`n"
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "try without block":
-                    finalStr.="try"
-                    finalStr.="`n"
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "label":
-                    finalStr.=v_.labelName ":`n"
-            }
-        }
-        do(t_) {
-            if (Type(t_)=="String") {
-                MsgBox "This Should Never Happen1: " t_
-                return t_
-            }
-            switch t_.type {
-                case "first var scope":
-                    return do(t_.value)
-                case "property access":
-                    return do(t_.parent) "." t_.propName
-                case "array access":
-                    ;the order of this may cause problems
-                    return do(t_.parent) "[" do(t_.key) "]"
-                case "group":
-                    return "(" do(t_.value) ")"
-                case "pre-unary":
-                    return t_.op do(t_.right)
-                case "post-unary assignment":
-                    return do(t_.left) t_.op
-                case "binary":
-                    return do(t_.left) " " t_.op " " do(t_.right)
-                case "comma multi-statement":
-                    return do(t_.left) ", " do(t_.right)
-                case "ternary":
-                    return do(t_.condition) " ? " do(t_.ifTrue) " : " do(t_.ifFalse)
-                case "concat":
-                    return do(t_.left) (t_.op == "" ? " " : t_.op) do(t_.right)
-                case "function call", "function definition":
-                    argsStr:=""
-                    if (t_.args.Length) {
-                        argsStr.=do(t_.args[1])
-                        i_:=2, len:=t_.args.Length + 1
-                        while (i_<len) {
-                            argsStr.=", " do(t_.args[i_])
-                            i_++
+                        if (classKeysArr.Length) {
+                            classKeysArr[classKeysArr.Length].Push({propName:v_.func.value,varInfo:{vartype:"simply defined",possiblyFunc:v_}})
+                        } else {
+                            superGlobalVarsMap[v_.func.value]:={vartype:"simply defined",possiblyFunc:v_}
                         }
                     }
-                    return do(t_.func) "(" argsStr ")"
-                case "object":
-                    argsStr:=""
-                    if (t_.keys.Length) {
-                        argsStr.=do(t_.keys[1]) ":" do(t_.values[1])
-                        i_:=2, len:=t_.keys.Length + 1
-                        while (i_<len) {
-                            argsStr.=", " do(t_.keys[i_]) ":" do(t_.values[i_])
-                            i_++
-                        }
+                case "class":
+                    keys:=[]
+                    if (classKeysArr.Length) {
+                        classKeysArr[classKeysArr.Length].Push({propName:v_.className,varInfo:{vartype:"class this",keys:keys}})
+                    } else {
+                        superGlobalVarsMap[v_.className]:={vartype:"class this",keys:keys}
                     }
-                    return "{" argsStr "}"
-                case "array":
-                    argsStr:=""
-                    if (t_.elements.Length) {
-                        argsStr.=do(t_.elements[1])
-                        i_:=2, len:=t_.elements.Length + 1
-                        while (i_<len) {
-                            argsStr.=", " do(t_.elements[i_])
-                            i_++
-                        }
-                    }
-                    return "[" argsStr "]"
+                    classKeysArr.Push(keys)
+                    v_:=statements[++k_]
+                    do_statements(v_.statements)
+                    classKeysArr.Pop()
             }
         }
     }
@@ -1952,15 +1928,9 @@ walker_globalVars() {
         withNewline() {
             switch v_.type {
                 case "command":
+                    finalStr.=v_._name
                     if (v_.args.Length) {
-                        finalStr.=v_._name " " do(v_.args[1])
-                        i_:=2, len:=v_.args.Length + 1
-                        while (i_<len) {
-                            finalStr.=", " do(v_.args[i_])
-                            i_++
-                        }
-                    } else {
-                        finalStr.=v_._name
+                        finalStr.=" " getArgsArrStr(v_.args)
                     }
                     finalStr.="`n"
                 case "hotkey":
@@ -1972,20 +1942,6 @@ walker_globalVars() {
                     finalStr.=v_.value " "
                     v_:=statements[++k_]
                     withNewline()
-                case "block":
-                    finalStr.="{`n"
-                    indent.="  "
-                    do_statements(v_.statements)
-                    indent:=SubStr(indent, 3)
-                    finalStr.=indent
-                    finalStr.="}`n"
-                case "block before else":
-                    finalStr.="{`n"
-                    indent.="  "
-                    do_statements(v_.statements)
-                    indent:=SubStr(indent, 3)
-                    finalStr.=indent
-                    finalStr.="} "
                 case "function definition":
                     finalStr.=do(v_) " "
                     v_:=v_.body
@@ -1993,8 +1949,14 @@ walker_globalVars() {
                     if (indent=="") {
                         globalFunctionIndices.Push(k_)
                     }
+                case "class":
+                    globalFunctionIndices.Push(k_ + 1)
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
+                case "argsArr with block":
+                    finalStr.=getArgsArrStr(v_.argsArr) " "
+                case "argsArr without block":
+                    finalStr.=getArgsArrStr(v_.argsArr) "`n"
                 case "if with block":
                     finalStr.="if "
                     v_:=statements[++k_]
@@ -2060,6 +2022,18 @@ walker_globalVars() {
                     finalStr.=v_.labelName ":`n"
             }
         }
+        getArgsArrStr(argsArr) {
+            argsStr:=""
+            if (argsArr.Length) {
+                argsStr.=do(argsArr[1])
+                i_:=2, len:=argsArr.Length + 1
+                while (i_<len) {
+                    argsStr.=", " do(argsArr[i_])
+                    i_++
+                }
+            }
+            return argsStr
+        }
         do(t_) {
             if (Type(t_)=="String") {
                 MsgBox "This Should Never Happen2: " t_
@@ -2081,7 +2055,7 @@ walker_globalVars() {
                     return "(" do(t_.value) ")"
                 case "pre-unary":
                     return t_.op do(t_.right)
-                case "post-unary assignment":
+                case "post-unary assignment", "variadic":
                     return do(t_.left) t_.op
                 case "binary":
                     return do(t_.left) " " t_.op " " do(t_.right)
@@ -2135,9 +2109,47 @@ walker_globalVars()
 reservedVars := Map()
 reservedVars.CaseSense := "Off"
 reservedVars.Set(
-    "in", "in_"
+    "in", "in_",
+    "case", "case_",
 )
 
+deepEqual(o1,o2) {
+    if (Type(o1)!==Type(o2)) {
+        return false
+    }
+    switch Type(o1) {
+        case "Object":
+            for k in o1.OwnProps() {
+                if (!o2.HasOwnProp(k)) {
+                    return false
+                }
+            }
+            for k in o2.OwnProps() {
+                if (!o1.HasOwnProp(k)) {
+                    return false
+                }
+            }
+            for k in o1.OwnProps() {
+                if (!deepEqual(o1.%k%,o2.%k%)) {
+                    return false
+                }
+            }
+        case "Array":
+            if (o1.Length!==o2.Length) {
+                return false
+            }
+            for k, _ in o1 {
+                if (!deepEqual(o1[k],o2[k])) {
+                    return false
+                }
+            }
+        default:
+            if (o1!==o2) {
+                return false
+            }
+    }
+    return true
+}
 walker_replacer() {
     finalStr:=""
     indent:=""
@@ -2315,7 +2327,19 @@ walker_replacer() {
                     }
                     finalStr.=v_.keyName
                 case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
-                , "comma multi-statement", "concat":
+                , "concat":
+                    finalStr.=do(statements, k_) "`n"
+                case "comma multi-statement":
+                    t_:=v_
+                    commaStatementsCount:=2
+                    while (t_.left.type=="comma multi-statement") {
+                        t_:=t_.left
+                        ++commaStatementsCount
+                    }
+                    if (commaStatementsCount==2 && t_.left.type=="binary" && t_.left.op=="-=" && t_.right.type=="variable") {
+                        replacement:={left:t_.left.left,op:":=",right:{args:[t_.left.left,t_.left.right,{type:"string",value:t_.right.value}],func:{type:"variable",value:"DateDiff"},type:"function call"},type:"binary"}
+                        statements[k_]:=replacement
+                    }
                     finalStr.=do(statements, k_) "`n"
                 case "var scope declaration":
                     finalStr.=v_.value " "
@@ -2328,7 +2352,7 @@ walker_replacer() {
                     indent:=SubStr(indent, 3)
                     finalStr.=indent
                     finalStr.="}`n"
-                case "block before else":
+                case "block before else","block before catch":
                     finalStr.="{`n"
                     indent.="  "
                     do_statements(v_.statements)
@@ -2339,7 +2363,7 @@ walker_replacer() {
                     finalStr.="class " v_.className " "
                     currentScope:=Map()
                     currentScope.CaseSense:="Off"
-                    currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
+                    currentScope["this"]:={vartype:"class this",keys:[]} ;`this` isn't global, but should be defined in `class`
                     functionScopes.Push(currentScope)
                     functionScopeNames.Push(v_.className)
 
@@ -2348,7 +2372,7 @@ walker_replacer() {
                     isStatic:=true
                     for possiblyFunc in v_.statements {
                         if (possiblyFunc.type == "function definition") {
-                            currentScope[possiblyFunc.func.value] := {vartype:"function inside class"}
+                            currentScope["this"].keys.push({propName:possiblyFunc.func.value,varInfo:{vartype:"simply defined",possiblyFunc:possiblyFunc}})
                             switch (possiblyFunc.func.value), 0 {
                                 case "__New", "__Delete":
                                     isStatic:=false
@@ -2397,6 +2421,8 @@ walker_replacer() {
                                 addToScope(e_, "left", {vartype:"simply defined"})
                             case "variable":
                                 addToScope(v_.args, argIdx, {vartype:"simply defined"})
+                            case "variadic":
+                                addToScope(e_, "left", {vartype:"simply defined"})
                             default:
                                 MsgBox "Parameter not anything jitj430j043j"
                         }
@@ -2411,6 +2437,10 @@ walker_replacer() {
                     currentScope:=functionScopes.Pop()
                 case "condition with block":
                     finalStr.=do(v_, "expr") " "
+                case "argsArr with block":
+                    finalStr.=getArgsArrStr(v_.argsArr) " "
+                case "argsArr without block":
+                    finalStr.=getArgsArrStr(v_.argsArr) "`n"
                 case "if with block":
                     finalStr.="if "
                     v_:=statements[++k_]
@@ -2472,9 +2502,64 @@ walker_replacer() {
                     v_:=statements[++k_]
                     withNewline()
                     indent:=SubStr(indent, 3)
+                case "for with block":
+                    currentScope[v_.var1.value]:={vartype:"simply defined"}
+                    finalStr.="for " do(v_, "var1")
+                    if (v_.var2) {
+                        currentScope[v_.var2.value]:={vartype:"simply defined"}
+                        finalStr.=", " do(v_, "var2")
+                    }
+                    finalStr.=" in " do(v_, "expression")
+
+                    finalStr.=" " ;for the block
+                    v_:=statements[++k_]
+                    withNewline()
+                case "for without block":
+                    currentScope[v_.var1.value]:={vartype:"simply defined"}
+                    finalStr.="for " do(v_, "var1")
+                    if (v_.var2) {
+                        currentScope[v_.var2.value]:={vartype:"simply defined"}
+                        finalStr.=", " do(v_, "var2")
+                    }
+                    finalStr.=" in " do(v_, "expression")
+
+                    finalStr.="`n"
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
                 case "label":
                     finalStr.=v_.labelName ":`n"
             }
+        }
+        getArgsArrStr(argsArr) {
+            argsStr:=""
+            if (argsArr.Length) {
+                argsStr.=do(argsArr, 1)
+                i_:=2, len:=argsArr.Length + 1
+                while (i_<len) {
+                    argsStr.=", " do(argsArr, i_)
+                    i_++
+                }
+            }
+            return argsStr
+        }
+        getNextTempVariable() {
+            testNum:=1
+            outer:
+            loop {
+                testName:="temp" (testNum > 1 ? testNum : "")
+                for _scope in functionScopes {
+                    if (_scope.Has(testName)) {
+                        ++testNum
+                        continue outer
+                    }
+                }
+                break
+            }
+            currentScope[testName]:={vartype:"simply defined"}
+            return {type:"variable",value:testName}
         }
         do(obj, key) {
 
@@ -2524,6 +2609,16 @@ walker_replacer() {
                                 obj.%key%:=replacement
                             } else {
                                 obj[key]:=replacement
+                            }
+                        case "A_StringCaseSense":
+                            if (obj.type=="binary" && obj.op==":=" && key=="left") {
+                            } else {
+                                replacement:={type:"group",value:{condition:{args:[{type:"variable",value:"A_StringCaseSense"}],func:{type:"variable",value:"IsSet"},type:"function call"},ifFalse:{left:{type:"variable",value:"A_StringCaseSense"},op:":=",right:{type:"string",value:"Off"},type:"binary"},ifTrue:{type:"variable",value:"A_StringCaseSense"},type:"ternary"}}
+                                if (Type(obj) == "Object") {
+                                    obj.%key%:=replacement
+                                } else {
+                                    obj[key]:=replacement
+                                }
                             }
                         case "Comspec":
                             t_.value:="A_ComSpec"
@@ -2678,8 +2773,12 @@ walker_replacer() {
                 case "group":
                     return "(" do(t_, "value") ")"
                 case "pre-unary":
+                    doNotTouchRight:=do(t_, "right")
                     if (t_.op == "&") {
                         _var:=t_.right
+                        if (_var.type=="group") {
+                            _var:=_var.value.left
+                        }
                         ; while (_var.type == "binary") {
                             ; obj:=_var, key:="left"
                             ; _var:=_var.left
@@ -2695,7 +2794,8 @@ walker_replacer() {
                                 switch _scope[_var.value].vartype {
                                     case "string so StrPtr", "simply defined": ;Parameter defaults to string
                                         ; &var -> StrPtr(var)
-                                        replacement:={args:[_var], func:{type:"variable", value:"StrPtr"}, type:"function call"}
+                                        tempVar:=getNextTempVariable()
+                                        replacement:={type:"group",value:{condition:{args:[{left:tempVar,op:":=",right:t_.right,type:"binary"}],func:{type:"variable",value:"IsObject"},type:"function call"},ifFalse:{args:[tempVar],func:{type:"variable",value:"StrPtr"},type:"function call"},ifTrue:{args:[tempVar],func:{type:"variable",value:"ObjPtr"},type:"function call"},type:"ternary"}}
                                         if (Type(obj) == "Object") {
                                             obj.%key%:=replacement
                                         } else {
@@ -2718,63 +2818,83 @@ walker_replacer() {
                         }
                         MsgBox "not anything 23534539uwjegi"
                     }
-                    return t_.op do(t_, "right")
+                    return t_.op doNotTouchRight
                 case "v2 pre-unary":
                     return t_.op do(t_, "right")
-                case "post-unary assignment":
+                case "post-unary assignment", "variadic":
                     return do(t_, "left") t_.op
                 case "binary":
-                    doNotTouchLeft:=do(t_, "left")
-                    doNotTouchRight:=do(t_, "right")
-                    if (t_.op == ":=") {
-                        switch t_.right.type {
-                            case "string", "concat":
-                                currentScope[doNotTouchLeft]:={vartype:"string so StrPtr"}
-                            case "function call":
-                                loop 1 {
-                                    switch t_.right.func.type {
-                                        case "variable":
-                                            switch t_.right.func.value, 0 {
-                                                case "ComObject":
-                                                    if (t_.right.args.Length == 2) {
-                                                        addToScope(t_, "left", {vartype:"two param ComObject is Ptr"})
+                    doNotTouchLeft:=""
+                    doNotTouchRight:=""
+                    switch t_.op {
+                        case ":=":
+                            doNotTouchLeft:=do(t_, "left")
+                            doNotTouchRight:=do(t_, "right")
+                            switch t_.right.type {
+                                case "string", "concat":
+                                    currentScope[doNotTouchLeft]:={vartype:"string so StrPtr"}
+                                case "function call":
+                                    loop 1 {
+                                        switch t_.right.func.type {
+                                            case "variable":
+                                                switch t_.right.func.value, 0 {
+                                                    case "ComObject":
+                                                        if (t_.right.args.Length == 2) {
+                                                            addToScope(t_, "left", {vartype:"two param ComObject is Ptr"})
+                                                            break
+                                                        }
+                                                    case "ComObjQuery":
+                                                        addToScope(t_, "left", {vartype:"ComObjQuery is Ptr"})
                                                         break
-                                                    }
-                                                case "ComObjQuery":
-                                                    addToScope(t_, "left", {vartype:"ComObjQuery is Ptr"})
-                                                    break
-                                                case "WinGetList":
-                                                    currentScope[t_.left.value]:={vartype:"WinGetList Array"}
-                                                    currentScope[t_.left.value "%A_Index%"]:={vartype:"WinGetList Element"}
-                                                    break
-                                            }
-                                    }
-                                    currentScope[doNotTouchLeft]:={vartype:"simply defined"}
-                                }
-                            default:
-                                currentScope[doNotTouchLeft]:={vartype:"simply defined"}
-                            ; SubStr too
-                        }
-                        switch t_.left.type {
-                            case "property access":
-                                if (t_.left.parent.type == "variable" && t_.left.parent.value = "this") {
-                                    s_ := functionScopeNames.Length
-                                    while (s_ > 2) {
-                                        if (functionScopeNames[s_] == "__New" && (functionScopes[s_ - 1].Has("__Get") || functionScopes[s_ - 1].Has("__Set")) ) {
-                                            replacement:={args:[{type:"string",value:t_.left.propName},{keys:[{type:"obj key",value:"value"}],type:"object",values:[t_.right]}],func:{parent:{type:"variable",value:"this"},propName:"DefineProp",type:"property access"},type:"function call"}
-                                            if (Type(obj) == "Object") {
-                                                obj.%key%:=replacement
-                                            } else {
-                                                obj[key]:=replacement
-                                            }
-                                            break
+                                                    case "WinGetList":
+                                                        currentScope[t_.left.value]:={vartype:"WinGetList Array"}
+                                                        currentScope[t_.left.value "%A_Index%"]:={vartype:"WinGetList Element"}
+                                                        break
+                                                }
                                         }
-                                        s_--
+                                        currentScope[doNotTouchLeft]:={vartype:"simply defined"}
+                                    }
+                                default:
+                                    currentScope[doNotTouchLeft]:={vartype:"simply defined"}
+                                ; SubStr too
+                            }
+                            switch t_.left.type {
+                                case "property access":
+                                    if (t_.left.parent.type == "variable" && t_.left.parent.value = "this") {
+                                        s_ := functionScopeNames.Length
+                                        while (s_ > 2) {
+                                            if (functionScopeNames[s_] == "__New" && (functionScopes[s_ - 1].Has("__Get") || functionScopes[s_ - 1].Has("__Set")) ) {
+                                                replacement:={args:[{type:"string",value:t_.left.propName},{keys:[{type:"obj key",value:"value"}],type:"object",values:[t_.right]}],func:{parent:{type:"variable",value:"this"},propName:"DefineProp",type:"property access"},type:"function call"}
+                                                if (Type(obj) == "Object") {
+                                                    obj.%key%:=replacement
+                                                } else {
+                                                    obj[key]:=replacement
+                                                }
+                                                break
+                                            }
+                                            s_--
+                                        }
+
                                     }
 
+                            }
+                        case "==","=":
+                            ; ObjGetCapacity([param], 1) == "" -> Type(v)=="String"
+                            if (t_.left.type=="function call" && t_.left.func.type=="variable" && t_.left.func.value="ObjGetCapacity" && t_.left.args.Length==2 && t_.left.args[2].type=="number" && t_.left.args[2].value=="1" && t_.left.args[1].type=="array" && t_.left.args[1].elements.Length==1 && t_.left.args[1].elements[1].type=="variable") {
+                                replacement:={left:{args:t_.left.args[1].elements,func:{type:"variable",value:"Type"},type:"function call"},op:"==",right:{type:"string",value:"String"},type:"binary"}
+                                if (Type(obj) == "Object") {
+                                    obj.%key%:=replacement
+                                } else {
+                                    obj[key]:=replacement
                                 }
-
-                        }
+                                return
+                            } else {
+                                doNotTouchLeft:=do(t_, "left")
+                                doNotTouchRight:=do(t_, "right")
+                            }
+                        default:
+                            doNotTouchLeft:=do(t_, "left")
+                            doNotTouchRight:=do(t_, "right")
                     }
                     return doNotTouchLeft " " t_.op " " doNotTouchRight
                 case "comma multi-statement":
@@ -2800,7 +2920,14 @@ walker_replacer() {
                             }
                         }
                     }
-                    return do(t_, "condition") " ? " do(t_, "ifTrue") " : " do(t_, "ifFalse")
+                    ; a[b] ? a[b] : c -> a.Has(b) ? a[b] : c
+                    if (t_.condition.type == "array access" && deepEqual(t_.condition,t_.ifTrue)) {
+                        t_.condition:={args:[t_.condition.key],func:{parent:t_.condition.parent,propName:"Has",type:"property access"},type:"function call"}
+                    }
+                    doNotTouchCondition:=do(t_, "condition")
+                    doNotTouchIfTrue:=do(t_, "ifTrue")
+                    doNotTouchIfFalse:=do(t_, "ifFalse")
+                    return doNotTouchCondition " ? " doNotTouchIfTrue " : " doNotTouchIfFalse
                 case "concat":
                     return do(t_, "left") (t_.op == "" ? " " : t_.op) do(t_, "right")
                 case "function call":
@@ -2818,6 +2945,8 @@ walker_replacer() {
                                     }
                                 case "ComObjCreate":
                                     t_.func.value := "ComObject"
+                                case "Exception":
+                                    t_.func.value := "Error"
                                 case "Func":
                                     switch t_.args[1].Type {
                                         case "string":
@@ -2834,7 +2963,7 @@ walker_replacer() {
                                     }
                                 case "IsFunc":
                                     ; https://www.autohotkey.com/boards/viewtopic.php?style=19&f=13&t=96863#p431844
-                                    replacement:={args:[{type:"double-deref", value:t_.args[1]}], func:{type:"variable", value:"HasMethod"}, type:"function call"}
+                                    replacement:={type:"group",value:{left:{args:[{type:"double-deref", value:t_.args[1]}],func:{type:"variable",value:"IsSet"},type:"function call"},op:"&&",right:{args:[{type:"double-deref", value:t_.args[1]}],func:{type:"variable",value:"HasMethod"},type:"function call"},type:"binary"}}
                                     ; replacement:={args:[var_], func:{type:"variable", value:"IsSet"}, type:"function call"}
                                     ; {type:"group", value:{}}
                                     if (Type(obj) == "Object") {
@@ -2863,7 +2992,11 @@ walker_replacer() {
                                         case 1:
                                             replacementArr:=[t_.args[1], {type:"number", value:0}, {type:"string", value:"Ptr"}]
                                         case 2:
-                                            replacementArr:=[t_.args[1], t_.args[2], {type:"string", value:"Ptr"}]
+                                            if (t_.args[2].type=="string") {
+                                                replacementArr:=t_.args
+                                            } else {
+                                                replacementArr:=[t_.args[1], t_.args[2], {type:"string", value:"Ptr"}]
+                                            }
                                         case 3:
                                             replacementArr:=t_.args
                                         default:
@@ -2917,21 +3050,101 @@ walker_replacer() {
                                         currentScope[outVarName]:={vartype:"RegexMatch root uninitialized"}
                                         t_.args[3] := {type:"v2 pre-unary", op:"&", right:t_.args[3]}
                                     }
+                                case "ObjGetCapacity":
+                                    ; ObjGetCapacity([param], 1) -> (Type(v)=="String"||"")
+                                    if (t_.args.Length==2 && t_.args[2].type=="number" && t_.args[2].value=="1" && t_.args[1].type=="array" && t_.args[1].elements.Length==1 && t_.args[1].elements[1].type=="variable") {
+                                        replacement:={type:"group",value:{left:{left:{args:t_.args[1].elements,func:{type:"variable",value:"Type"},type:"function call"},op:"==",right:{type:"string",value:"String"},type:"binary"},op:"||",right:{type:"string",value:""},type:"binary"}}
+                                        if (Type(obj) == "Object") {
+                                            obj.%key%:=replacement
+                                        } else {
+                                            obj[key]:=replacement
+                                        }
+                                    }
                             }
                         case "property access":
                             switch t_.func.propName, 0 {
+                                case "_NewEnum":
+                                    t_.func.propName:="__Enum"
                                 case "ReadLine":
                                     if (obj.type == "binary") {
                                         addToScope(obj.left, "value", {vartype:"ReadLine Line"})
                                     }
-                                case "Length", "Count":
+                                case "Length":
                                     ; `.Length()` -> `.Length`
-                                    ; `.Count()` -> `.Count`
                                     replacement:=t_.func
                                     if (Type(obj) == "Object") {
                                         obj.%key%:=replacement
                                     } else {
                                         obj[key]:=replacement
+                                    }
+                                case "Count":
+                                    ; `a.Count()` -> `(Type(temp:=a)=="Array" ? temp.Length : temp.Count)`
+                                    tempVar:=getNextTempVariable()
+                                    replacement:={type:"group",value:{left:{args:[{left:tempVar,op:":=",right:t_.func.parent,type:"binary"}],func:{type:"variable",value:"Type"},type:"function call"},op:"==",right:{condition:{type:"string",value:"Array"},ifFalse:{parent:tempVar,propName:"Count",type:"property access"},ifTrue:{parent:tempVar,propName:"Length",type:"property access"},type:"ternary"},type:"binary"}}
+                                    if (Type(obj) == "Object") {
+                                        obj.%key%:=replacement
+                                    } else {
+                                        obj[key]:=replacement
+                                    }
+                                case "value":
+                                    for _scope in functionScopes {
+                                        if (_scope.Has(t_.func.parent.value)) {
+                                            ok:=_scope[t_.func.parent.value]
+                                            varInfo:=_scope[t_.func.parent.value]
+                                            switch varInfo.vartype {
+                                                case "RegexMatch root","RegexMatch obj root":
+                                                    ; o.value(N) -> o.N
+                                                    varInfo.vartype:="RegexMatch obj root"
+                                                    matchGroup:=(t_.args.Length ? String(t_.args[1].value) : "0")
+                                                    replacement:={type:"property access",parent:t_.func.parent,propName:matchGroup}
+                                                    if (Type(obj) == "Object") {
+                                                        obj.%key%:=replacement
+                                                    } else {
+                                                        obj[key]:=replacement
+                                                    }
+                                            }
+                                            break
+                                        }
+                                    }
+                                case "pos":
+                                    for _scope in functionScopes {
+                                        if (_scope.Has(t_.func.parent.value)) {
+                                            ok:=_scope[t_.func.parent.value]
+                                            varInfo:=_scope[t_.func.parent.value]
+                                            switch varInfo.vartype {
+                                                case "RegexMatch root","RegexMatch obj root":
+                                                    ; o.Pos() -> o.Pos(0)
+                                                    varInfo.vartype:="RegexMatch obj root"
+                                                    matchGroup:=(t_.args.Length ? t_.args[1].value : 0)
+                                                    replacement:={args:[{type:"number",value:matchGroup}],func:{parent:t_.func.parent,propName:"Pos",type:"property access"},type:"function call"}
+                                                    if (Type(obj) == "Object") {
+                                                        obj.%key%:=replacement
+                                                    } else {
+                                                        obj[key]:=replacement
+                                                    }
+                                            }
+                                            break
+                                        }
+                                    }
+                                case "len":
+                                    for _scope in functionScopes {
+                                        if (_scope.Has(t_.func.parent.value)) {
+                                            ok:=_scope[t_.func.parent.value]
+                                            varInfo:=_scope[t_.func.parent.value]
+                                            switch varInfo.vartype {
+                                                case "RegexMatch root","RegexMatch obj root":
+                                                    ; o.Len() -> o.Len(0)
+                                                    varInfo.vartype:="RegexMatch obj root"
+                                                    matchGroup:=(t_.args.Length ? t_.args[1].value : 0)
+                                                    replacement:={args:[{type:"number",value:matchGroup}],func:{parent:t_.func.parent,propName:"Len",type:"property access"},type:"function call"}
+                                                    if (Type(obj) == "Object") {
+                                                        obj.%key%:=replacement
+                                                    } else {
+                                                        obj[key]:=replacement
+                                                    }
+                                            }
+                                            break
+                                        }
                                     }
                                 case "HasKey":
                                     ; `.HasKey()` -> `.Has()`
@@ -2969,7 +3182,81 @@ walker_replacer() {
                                     } else {
                                         obj[key]:=replacement
                                     }
+                                case "GetCapacity":
+                                    if (t_.args.Length==0) {
+                                        ; v.GetCapacity() -> ((Type(temp:=v)=="Array" && temp.Length))
+                                        tempVar:=getNextTempVariable()
+                                        replacement:={type:"group",value:{type:"group",value:{left:{left:{args:[{left:tempVar,op:":=",right:t_.func.parent,type:"binary"}],func:{type:"variable",value:"Type"},type:"function call"},op:"==",right:{type:"string",value:"Array"},type:"binary"},op:"&&",right:{parent:tempVar,propName:"Length",type:"property access"},type:"binary"}}}
+                                        if (Type(obj) == "Object") {
+                                            obj.%key%:=replacement
+                                        } else {
+                                            obj[key]:=replacement
+                                        }
+                                    }
+                                    else if (t_.args.Length==1 && t_.args[1].type=="number" && t_.args[1].value=="1" && t_.func.parent.type=="array" && t_.func.parent.elements.Length==1 && t_.func.parent.elements[1].type=="variable") {
+                                        ; [v].GetCapacity(1) -> (Type(v)=="String"||"")
+                                        replacement:={type:"group",value:{left:{left:{args:t_.func.parent.elements,func:{type:"variable",value:"Type"},type:"function call"},op:"==",right:{type:"string",value:"String"},type:"binary"},op:"||",right:{type:"string",value:""},type:"binary"}}
+                                        if (Type(obj) == "Object") {
+                                            obj.%key%:=replacement
+                                        } else {
+                                            obj[key]:=replacement
+                                        }
+                                    }
+                                case "next":
+                                    for k, _ in t_.args {
+                                        t_.args[k] := {type:"v2 pre-unary",op:"&",right:t_.args[k]}
+                                    }
+                                    t_.func:=t_.func.parent
                             }
+                    }
+                    ; connect to definition
+                    b_:=t_.func
+                    keysPath:=[]
+                    while (b_.type=="property access") {
+                        keysPath.Push(b_.propName)
+                        b_:=b_.parent
+                    }
+                    if (b_.type=="variable") {
+
+                        outer4:
+                        loop 1 {
+                            varInfo:=0
+                            outer:
+                            loop 1 {
+                                for _scope in functionScopes {
+                                    if (_scope.Has(b_.value)) {
+                                        varInfo:=_scope[b_.value]
+                                        break outer
+                                    }
+                                }
+                                ; MsgBox "funcName not found function declaration: " b_.value
+                                break outer4
+                            }
+                            if (varInfo.vartype=="class this") {
+                                keyLen:=keysPath.Length
+                                while (keyLen) {
+                                    if (varInfo.vartype!=="class this") {
+                                        break outer4
+                                    }
+                                    outer3:
+                                    loop 1 {
+                                        for key in varInfo.keys {
+                                            if (key.propName=keysPath[keyLen]) {
+                                                varInfo:=key.varInfo
+                                                break outer3
+                                            }
+                                        }
+                                        ; MsgBox "keyNotFound function declaration"
+                                        break outer4
+                                    }
+                                    --keyLen
+                                }
+                                while (t_.args.Length > varInfo.possiblyFunc.args.Length) {
+                                    t_.args.Pop()
+                                }
+                            }
+                        }
+
                     }
                     argsStr:=""
                     if (t_.args.Length) {
@@ -3040,24 +3327,25 @@ walker_undefinedVars() {
     finalStr:=""
     indent:=""
     functionScopes:=[superGlobalVarsMap]
-    _currentIndices:="" ;declare
-    currentScope:="" ;declare
-    undefinedVarsMap:="" ;declare
 
     takesIndices(globalFunctionIndices, currentArr)
     takesIndices(notCurrentIndices, notCurrentArr) {
         for i_ in notCurrentIndices {
-            if (notCurrentArr[i_].type=="block") {
-                blockObj:=notCurrentArr[i_]
-            } else {
-                blockObj:=notCurrentArr[i_].body
-            }
             _currentIndices:=[]
 
             currentScope:=Map()
             currentScope.CaseSense:="Off"
             functionScopes.Push(currentScope)
 
+            if (notCurrentArr[i_].type=="block") {
+                blockObj:=notCurrentArr[i_]
+                if (notCurrentArr.Length > 1 && notCurrentArr[i_ - 1].type=="class") {
+                    currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
+                    currentScope[notCurrentArr[i_ - 1].className]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
+                }
+            } else {
+                blockObj:=notCurrentArr[i_].body
+            }
 
             if (notCurrentArr[i_].type=="function definition") {
                 ;parameters are also declared variables
@@ -3065,8 +3353,10 @@ walker_undefinedVars() {
                     switch param.type {
                         case "variable":
                             currentScope[param.value]:={vartype:"simply defined"}
-                        case "binary":
+                        case "binary", "variadic":
                             currentScope[param.left.value]:={vartype:"simply defined"}
+                        default:
+                            MsgBox "Parameter not anything fjwe09fj93"
                     }
                 }
             }
@@ -3083,280 +3373,371 @@ walker_undefinedVars() {
                 }
             }
 
+            do_statements(statements) {
+                enumNothingLocalGlobal:=0
+
+                statements_len:=statements.Length + 1
+                k_do_statements:=1
+                while (k_do_statements < statements_len) {
+                    v_:=statements[k_do_statements]
+                    if (v_.type=="label") {
+                        currentScope[v_.labelName]:={vartype:"labelName"}
+                    }
+                    k_do_statements++
+                }
+                k_do_statements:=1
+                while (k_do_statements < statements_len) {
+                    v_:=statements[k_do_statements]
+                    finalStr.=indent
+                    withNewline()
+                    k_do_statements++
+                }
+
+                withNewline() {
+                    switch v_.type {
+                        case "command":
+                            finalStr.=v_._name
+                            if (v_.args.Length) {
+                                finalStr.=" " getArgsArrStr(v_.args)
+                            }
+                            finalStr.="`n"
+                        case "hotkey":
+                            finalStr.=v_.keyName
+                        case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
+                        , "comma multi-statement":
+                            finalStr.=do(statements, k_do_statements) "`n"
+                        case "var scope declaration":
+                            ; global`n
+                            ; is a command with args: []
+                            finalStr.=v_.value
+                            switch v_.value {
+                                case "local":
+                                    enumNothingLocalGlobal:=1
+                                case "global":
+                                    enumNothingLocalGlobal:=2
+                            }
+                            v_:=statements[++k_do_statements]
+                            finalStr.=" "
+                            withNewline()
+                            enumNothingLocalGlobal:=0
+                        case "block":
+                            finalStr.="{`n"
+                            indent.="  "
+                            do_statements(v_.statements)
+                            indent:=SubStr(indent, 3)
+                            finalStr.=indent
+                            finalStr.="}`n"
+                        case "block before else","block before catch":
+                            finalStr.="{`n"
+                            indent.="  "
+                            do_statements(v_.statements)
+                            indent:=SubStr(indent, 3)
+                            finalStr.=indent
+                            finalStr.="} "
+                        ; case "class": ; not reached because only reaches block
+                            ; currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
+                            ; this:=3
+                            ; MsgBox % this ;3
+                        ; case "function definition":
+                            ; finalStr.=do(statements, k_do_statements) " "
+                            ; v_:=v_.body
+                            ; withNewline()
+                        case "condition with block":
+                            finalStr.=do(v_, "expr") " "
+                        case "argsArr with block":
+                            finalStr.=getArgsArrStr(v_.argsArr) " "
+                        case "argsArr without block":
+                            finalStr.=getArgsArrStr(v_.argsArr) "`n"
+                        case "if with block":
+                            finalStr.="if "
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                        case "if without block":
+                            finalStr.="if "
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+
+                            indent.="  "
+                            finalStr.=indent
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                            indent:=SubStr(indent, 3)
+                            if (k_do_statements + 1 < statements_len && (statements[k_do_statements+1].type == "else without block" || statements[k_do_statements+1].type == "else with block")) {
+                                finalStr.=indent
+                                v_:=statements[++k_do_statements]
+                                withNewline()
+                            }
+                        case "while with block":
+                            finalStr.="while "
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                        case "while without block":
+                            finalStr.="while "
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+
+                            indent.="  "
+                            finalStr.=indent
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                            indent:=SubStr(indent, 3)
+                        case "else with block":
+                            finalStr.="else "
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                        case "catch with block":
+                            finalStr.="catch "
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                        case "else without block":
+                            finalStr.="else"
+                            finalStr.="`n"
+                            indent.="  "
+                            finalStr.=indent
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                            indent:=SubStr(indent, 3)
+                        case "try without block":
+                            finalStr.="try"
+                            finalStr.="`n"
+                            indent.="  "
+                            finalStr.=indent
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                            indent:=SubStr(indent, 3)
+                        case "for with block":
+                            currentScope[v_.var1.value]:={vartype:"simply defined"}
+                            finalStr.="for " do(v_, "var1")
+                            if (v_.var2) {
+                                currentScope[v_.var2.value]:={vartype:"simply defined"}
+                                finalStr.=", " do(v_, "var2")
+                            }
+                            finalStr.=" in " do(v_, "expression")
+
+                            finalStr.=" " ;for the block
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                        case "for without block":
+                            currentScope[v_.var1.value]:={vartype:"simply defined"}
+                            finalStr.="for " do(v_, "var1")
+                            if (v_.var2) {
+                                currentScope[v_.var2.value]:={vartype:"simply defined"}
+                                finalStr.=", " do(v_, "var2")
+                            }
+                            finalStr.=" in " do(v_, "expression")
+
+                            finalStr.="`n"
+                            indent.="  "
+                            finalStr.=indent
+                            v_:=statements[++k_do_statements]
+                            withNewline()
+                            indent:=SubStr(indent, 3)
+                        case "label":
+                            finalStr.=v_.labelName ":`n"
+                    }
+                }
+                getArgsArrStr(argsArr) {
+                    argsStr:=""
+                    if (argsArr.Length) {
+                        argsStr.=do(argsArr, 1)
+                        i_do_statements:=2, len:=argsArr.Length + 1
+                        while (i_do_statements<len) {
+                            argsStr.=", " do(argsArr, i_do_statements)
+                            i_do_statements++
+                        }
+                    }
+                    return argsStr
+                }
+                do(obj, key) {
+                    t_:=Type(obj) == "Object" ? obj.%key% : obj[key]
+                    if (Type(t_)=="String") {
+                        MsgBox "This Should Never Happen4: " t_
+                        return t_
+                    }
+                    switch t_.type {
+                        case "variable":
+                            switch (enumNothingLocalGlobal) {
+                                case 0:
+                                    outer:
+                                    loop 1 {
+                                        for _scope in functionScopes {
+                                            if (_scope.Has(t_.value)) {
+                                                break outer
+                                            }
+                                        }
+                                        if (Type(obj) == "Object" && obj.type=="post-unary assignment") {
+                                            undefinedVarsMap[t_.value]:={name:t_.value,guessType:"number"}
+                                        } else {
+                                            if (!undefinedVarsMap.Has(t_.value)) {
+                                                undefinedVarsMap[t_.value]:={name:t_.value,guessType:"string"}
+                                            }
+                                        }
+                                        break outer
+                                    }
+                                case 2:
+                                    currentScope[t_.value]:={vartype:"simply defined"}
+                            }
+                            if (t_.value="A_StringCaseSense") {
+                                undefinedVarsMap[t_.value]:={name:t_.value,guessType:"very global"}
+                            }
+                            ; currentScope[t_.value]:=t_.value
+                        case "first var scope":
+                            return do(t_, "value")
+                        case "property access":
+                            return do(t_, "parent") "." t_.propName
+                        case "array access":
+                            ;the order of this may cause problems
+                            return do(t_, "parent") "[" do(t_, "key") "]"
+                        case "group":
+                            return "(" do(t_, "value") ")"
+                        case "pre-unary":
+                            return t_.op do(t_, "right")
+                        case "v2 pre-unary": ;assume only &
+                            switch t_.right.type {
+                                case "variable":
+                                    currentScope[t_.right.value]:={vartype:"simply defined"}
+                                case "binary":
+                                    left_:=t_.right.left
+                                    if (left_.type == "variable") {
+                                        currentScope[left_.value]:={vartype:"simply defined"}
+                                    }
+                            }
+                            return t_.op do(t_, "right")
+                        case "post-unary assignment", "variadic":
+                            return do(t_, "left") t_.op
+                        case "binary":
+                            outer1:
+                            loop 1 {
+                                if (t_.op==":=") {
+                                    if (t_.left.type=="variable") {
+                                        doNotTouchRight:=do(t_, "right")
+                                        currentScope[t_.left.value]:={vartype:"simply defined"}
+                                        doNotTouchLeft:=do(t_, "left")
+                                        break outer1
+                                    }
+                                }
+                                doNotTouchLeft:=do(t_, "left")
+                                doNotTouchRight:=do(t_, "right")
+                            }
+                            return doNotTouchLeft " " t_.op " " doNotTouchRight
+                        case "comma multi-statement":
+                            return do(t_, "left") ", " do(t_, "right")
+                        case "ternary":
+                            return do(t_, "condition") " ? " do(t_, "ifTrue") " : " do(t_, "ifFalse")
+                        case "concat":
+                            return do(t_, "left") (t_.op == "" ? " " : t_.op) do(t_, "right")
+                        case "function call":
+                            argsStr:=""
+                            if (t_.args.Length) {
+                                argsStr.=do(t_.args, 1)
+                                i_do_statements:=2, len:=t_.args.Length + 1
+                                while (i_do_statements<len) {
+                                    argsStr.=", " do(t_.args, i_do_statements)
+                                    i_do_statements++
+                                }
+                            }
+                            return do(t_, "func") "(" argsStr ")"
+                        case "object":
+                            argsStr:=""
+                            if (t_.keys.Length) {
+                                argsStr.=do(t_.keys, 1) ":" do(t_.values, 1)
+                                i_do_statements:=2, len:=t_.keys.Length + 1
+                                while (i_do_statements<len) {
+                                    argsStr.=", " do(t_.keys, i_do_statements) ":" do(t_.values, i_do_statements)
+                                    i_do_statements++
+                                }
+                            }
+                            return "{" argsStr "}"
+                        case "array":
+                            argsStr:=""
+                            if (t_.elements.Length) {
+                                argsStr.=do(t_.elements, 1)
+                                i_do_statements:=2, len:=t_.elements.Length + 1
+                                while (i_do_statements<len) {
+                                    argsStr.=", " do(t_.elements, i_do_statements)
+                                    i_do_statements++
+                                }
+                            }
+                            return "[" argsStr "]"
+                    }
+                }
+            }
             do_statements(blockObj.statements) ;block after
             ; d undefinedVarsMap
 
             if (_currentIndices.Length) {
                 takesIndices(_currentIndices, blockObj.statements)
             }
-            if (undefinedVarsMap.Count) {
-                for k_ in undefinedVarsMap {
-                    right:={type:"variable", value:k_}
-                    if (A_Index==1) {
-                        left:=right
-                    } else {
-                        left:={type:"comma multi-statement", left:left, right:right}
-                    }
-                }
-                blockObj.statements.InsertAt(1, {type:"var scope declaration", value: "global"}, left)
 
-                toInsert:=[]
-                for k_ in undefinedVarsMap {
-                    if (!superGlobalVarsMap.Has(k_)) {
-                        superGlobalVarsMap[k_]:=k_
-                        toInsert.Push({left:{type:"variable",value:k_},op:":=",right:{type:"string",value:""},type:"binary"})
-                    }
-                }
-                if (toInsert.Length) {
-                    for insertIdx, obj in currentArr {
-                        if (obj.type == "command" && HeaderCommands.Has(obj._name)) {
+            if (notCurrentArr.Length > 1 && notCurrentArr[i_-1].type=="hotkey") {
+                if (undefinedVarsMap.Count) {
+                    for k_ in undefinedVarsMap {
+                        right:={type:"variable", value:k_}
+                        if (A_Index==1) {
+                            left:=right
                         } else {
-                            currentArr.InsertAt(insertIdx, toInsert*)
-                            break
+                            left:={type:"comma multi-statement", left:left, right:right}
                         }
                     }
+                    blockObj.statements.InsertAt(1, {type:"var scope declaration", value: "global"}, left)
+
+                    toInsert:=[]
+                    for k_ in undefinedVarsMap {
+                        if (!superGlobalVarsMap.Has(k_)) {
+                            superGlobalVarsMap[k_]:=k_
+                            toInsert.Push({left:{type:"variable",value:k_},op:":=",right:{type:"string",value:""},type:"binary"})
+                        }
+                    }
+                    if (toInsert.Length) {
+                        for insertIdx, obj in currentArr {
+                            if (obj.type == "command" && HeaderCommands.Has(obj._name)) {
+                            } else {
+                                currentArr.InsertAt(insertIdx, toInsert*)
+                                break
+                            }
+                        }
+                    }
+
+
                 }
-
-
+            } else {
+                toInsert:=[]
+                globalLeft:=""
+                for k_ in undefinedVarsMap {
+                    initialization:=0
+                    switch undefinedVarsMap[k_].guessType {
+                        case "number":
+                            initialization:={type:"number",value:0}
+                        case "string":
+                            initialization:={type:"string",value:""}
+                        case "very global":
+                            needGlobal:=true
+                            right:={type:"variable", value:k_}
+                            if (globalLeft) {
+                                globalLeft:={type:"comma multi-statement", globalLeft:globalLeft, right:right}
+                            } else {
+                                globalLeft:=right
+                            }
+                            continue
+                        default:
+                            MsgBox "no valid guessType for initialization fj943j9"
+                    }
+                    toInsert.Push({left:{type:"variable",value:k_},op:":=",right:initialization,type:"binary"})
+                }
+                if (globalLeft) {
+                    toInsert.InsertAt(1,{type:"var scope declaration", value: "global"},globalLeft)
+                }
+                blockObj.statements.InsertAt(1, toInsert*)
             }
+
+
             currentScope:=functionScopes.Pop()
         }
     }
-
-    do_statements(statements) {
-        enumNothingLocalGlobal:=0
-
-        statements_len:=statements.Length + 1
-        k_:=1
-        while (k_ < statements_len) {
-            v_:=statements[k_]
-            finalStr.=indent
-            withNewline()
-            k_++
-        }
-
-        withNewline() {
-            switch v_.type {
-                case "command":
-                    if (v_.args.Length) {
-                        finalStr.=v_._name " " do(v_.args, 1)
-                        i_:=2, len:=v_.args.Length + 1
-                        while (i_<len) {
-                            finalStr.=", " do(v_.args, i_)
-                            i_++
-                        }
-                    } else {
-                        finalStr.=v_._name
-                    }
-                    finalStr.="`n"
-                case "hotkey":
-                    finalStr.=v_.keyName
-                case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
-                , "comma multi-statement":
-                    finalStr.=do(statements, k_) "`n"
-                case "var scope declaration":
-                    ; global`n
-                    ; is a command with args: []
-                    finalStr.=v_.value
-                    switch v_.value {
-                        case "local":
-                            enumNothingLocalGlobal:=1
-                        case "global":
-                            enumNothingLocalGlobal:=2
-                    }
-                    v_:=statements[++k_]
-                    finalStr.=" "
-                    withNewline()
-                    enumNothingLocalGlobal:=0
-                case "block":
-                    finalStr.="{`n"
-                    indent.="  "
-                    do_statements(v_.statements)
-                    indent:=SubStr(indent, 3)
-                    finalStr.=indent
-                    finalStr.="}`n"
-                case "block before else":
-                    finalStr.="{`n"
-                    indent.="  "
-                    do_statements(v_.statements)
-                    indent:=SubStr(indent, 3)
-                    finalStr.=indent
-                    finalStr.="} "
-                case "class":
-                    ; currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
-                    ; this:=3
-                    ; MsgBox % this ;3
-                case "function definition":
-                    finalStr.=do(statements, k_) " "
-                    v_:=v_.body
-                    withNewline()
-                case "condition with block":
-                    finalStr.=do(v_, "expr") " "
-                case "if with block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "if without block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else with block")) {
-                        finalStr.=indent
-                        v_:=statements[++k_]
-                        withNewline()
-                    }
-                case "while with block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "while without block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "else with block":
-                    finalStr.="else "
-                    v_:=statements[++k_]
-                    withNewline()
-                case "catch with block":
-                    finalStr.="catch "
-                    v_:=statements[++k_]
-                    withNewline()
-                case "else without block":
-                    finalStr.="else"
-                    finalStr.="`n"
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "try without block":
-                    finalStr.="try"
-                    finalStr.="`n"
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "label":
-                    finalStr.=v_.labelName ":`n"
-            }
-        }
-
-        do(obj, key) {
-            t_:=Type(obj) == "Object" ? obj.%key% : obj[key]
-            if (Type(t_)=="String") {
-                MsgBox "This Should Never Happen4: " t_
-                return t_
-            }
-            switch t_.type {
-                case "variable":
-                    switch (enumNothingLocalGlobal) {
-                        case 0:
-                            outer:
-                            loop 1 {
-                                for _scope in functionScopes {
-                                    if (_scope.Has(t_.value)) {
-                                        break outer
-                                    }
-                                }
-                                undefinedVarsMap[t_.value]:=t_.value
-                                break outer
-                            }
-                        case 2:
-                            currentScope[t_.value]:={vartype:"simply defined"}
-                    }
-                    ; currentScope[t_.value]:=t_.value
-                case "first var scope":
-                    return do(t_, "value")
-                case "property access":
-                    return do(t_, "parent") "." t_.propName
-                case "array access":
-                    ;the order of this may cause problems
-                    return do(t_, "parent") "[" do(t_, "key") "]"
-                case "group":
-                    return "(" do(t_, "value") ")"
-                case "pre-unary":
-                    return t_.op do(t_, "right")
-                case "v2 pre-unary": ;assume only &
-                    switch t_.right.type {
-                        case "variable":
-                            currentScope[t_.right.value]:={vartype:"simply defined"}
-                        case "binary":
-                            left_:=t_.right.left
-                            if (left_.type == "variable") {
-                                currentScope[left_.value]:={vartype:"simply defined"}
-                            }
-                    }
-                    return t_.op do(t_, "right")
-                case "post-unary assignment":
-                    return do(t_, "left") t_.op
-                case "binary":
-                    doNotTouchRight:=do(t_, "right")
-                    if (t_.op==":=") {
-                        if (t_.left.type=="variable") {
-                            currentScope[t_.left.value]:={vartype:"simply defined"}
-                        }
-                    }
-                    return do(t_, "left") " " t_.op " " doNotTouchRight
-                case "comma multi-statement":
-                    return do(t_, "left") ", " do(t_, "right")
-                case "ternary":
-                    return do(t_, "condition") " ? " do(t_, "ifTrue") " : " do(t_, "ifFalse")
-                case "concat":
-                    return do(t_, "left") (t_.op == "" ? " " : t_.op) do(t_, "right")
-                case "function call":
-                    argsStr:=""
-                    if (t_.args.Length) {
-                        argsStr.=do(t_.args, 1)
-                        i_:=2, len:=t_.args.Length + 1
-                        while (i_<len) {
-                            argsStr.=", " do(t_.args, i_)
-                            i_++
-                        }
-                    }
-                    return do(t_, "func") "(" argsStr ")"
-                case "object":
-                    argsStr:=""
-                    if (t_.keys.Length) {
-                        argsStr.=do(t_.keys, 1) ":" do(t_.values, 1)
-                        i_:=2, len:=t_.keys.Length + 1
-                        while (i_<len) {
-                            argsStr.=", " do(t_.keys, i_) ":" do(t_.values, i_)
-                            i_++
-                        }
-                    }
-                    return "{" argsStr "}"
-                case "array":
-                    argsStr:=""
-                    if (t_.elements.Length) {
-                        argsStr.=do(t_.elements, 1)
-                        i_:=2, len:=t_.elements.Length + 1
-                        while (i_<len) {
-                            argsStr.=", " do(t_.elements, i_)
-                            i_++
-                        }
-                    }
-                    return "[" argsStr "]"
-            }
-        }
-    }
-
 
 }
 walker_undefinedVars()
@@ -3382,15 +3763,9 @@ what() {
         withNewline() {
             switch v_.type {
                 case "command":
+                    finalStr.=v_._name
                     if (v_.args.Length) {
-                        finalStr.=v_._name " " do(v_.args[1])
-                        i_:=2, len:=v_.args.Length + 1
-                        while (i_<len) {
-                            finalStr.=", " do(v_.args[i_])
-                            i_++
-                        }
-                    } else {
-                        finalStr.=v_._name
+                        finalStr.=" " getArgsArrStr(v_.args)
                     }
                     finalStr.="`n"
                 case "hotkey":
@@ -3409,7 +3784,7 @@ what() {
                     indent:=SubStr(indent, 3)
                     finalStr.=indent
                     finalStr.="}`n"
-                case "block before else":
+                case "block before else","block before catch":
                     finalStr.="{`n"
                     indent.="  "
                     do_statements(v_.statements)
@@ -3428,18 +3803,38 @@ what() {
                     withNewline()
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
-                case "condition without block":
-                    finalStr.=do(v_.expr) "`n"
+                case "argsArr with block":
+                    finalStr.=getArgsArrStr(v_.argsArr) " "
+                case "argsArr without block":
+                    finalStr.=getArgsArrStr(v_.argsArr) "`n"
                 case "loop with block1":
                     finalStr.="loop "
                     v_:=statements[++k_]
                     withNewline()
                 case "loop with block2":
-                    finalStr.="loop "
+                    if (v_.loopExtend) {
+                        finalStr.="Loop " v_.loopExtend " "
+                    } else {
+                        finalStr.="loop "
+                    }
                     v_:=statements[++k_]
                     withNewline()
                     v_:=statements[++k_]
                     withNewline()
+                case "loop without block":
+                    if (v_.loopExtend) {
+                        finalStr.="Loop " v_.loopExtend " "
+                    } else {
+                        finalStr.="loop "
+                    }
+                    v_:=statements[++k_]
+                    withNewline()
+
+                    indent.="  "
+                    finalStr.=indent
+                    v_:=statements[++k_]
+                    withNewline()
+                    indent:=SubStr(indent, 3)
                 case "if with block":
                     finalStr.="if "
                     v_:=statements[++k_]
@@ -3461,16 +3856,6 @@ what() {
                         v_:=statements[++k_]
                         withNewline()
                     }
-                case "loop without block":
-                    finalStr.="loop "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
                 case "while with block":
                     finalStr.="while "
                     v_:=statements[++k_]
@@ -3489,6 +3874,10 @@ what() {
                     indent:=SubStr(indent, 3)
                 case "else with block":
                     finalStr.="else "
+                    v_:=statements[++k_]
+                    withNewline()
+                case "try with block":
+                    finalStr.="try "
                     v_:=statements[++k_]
                     withNewline()
                 case "catch with block":
@@ -3581,10 +3970,25 @@ what() {
             }
 
         }
+        getArgsArrStr(argsArr) {
+            argsStr:=""
+            if (argsArr.Length) {
+                argsStr.=do(argsArr[1])
+                i_:=2, len:=argsArr.Length + 1
+                while (i_<len) {
+                    argsStr.=", " do(argsArr[i_])
+                    i_++
+                }
+            }
+            return argsStr
+        }
         do(t_) {
             if (Type(t_)=="String") {
                 MsgBox "This Should Never Happen5: " t_
                 return t_
+            }
+            if (IsInteger(t_)) {
+                return
             }
             switch t_.type {
                 case "command empty arg", "function call empty arg":
@@ -3610,7 +4014,7 @@ what() {
                     } else {
                         return t_.op do(t_.right)
                     }
-                case "post-unary assignment":
+                case "post-unary assignment", "variadic":
                     return do(t_.left) t_.op
                 case "binary":
                     return do(t_.left) " " t_.op " " do(t_.right)
@@ -3858,13 +4262,15 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("Func.ahk"))
 ; bbb:=aaa(FileRead("pre-increment.ahk"))
 ; bbb:=aaa(FileRead("askForHelp1.ahk"))
-bbb:=aaa(FileRead("GooglePhraseFix.ahk"))
+; bbb:=aaa(FileRead("GooglePhraseFix.ahk"))
+bbb:=aaa(FileRead("Biga.ahk"))
+; bbb:=aaa(FileRead("tooManyArgs.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
 ; d currentArr
-; MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
-MsgBox A_Clipboard:=JSON_stringify(bbb.currentArr)
+MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
+; MsgBox A_Clipboard:=JSON_stringify(bbb.currentArr)
 A_Clipboard:=bbb.converted
 
 
