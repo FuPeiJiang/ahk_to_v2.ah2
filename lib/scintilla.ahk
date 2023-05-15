@@ -4,7 +4,7 @@
 class Scintilla extends Gui.Custom {
     Static p := A_PtrSize, u := StrLen(Chr(0xFFFF))
     Static DirectFunc := 0, DirectStatusFunc := 0
-    
+
     Static wm_notify := {AutoCCancelled:0x7E9
                        , AutoCCharDeleted:0x7EA
                        , AutoCCompleted:0x7EE
@@ -37,7 +37,7 @@ class Scintilla extends Gui.Custom {
                        , UriDropped:0x7DF            ; Change:0x300
                        , UserListSelection:0x7DE     ; KillFocus:0x100
                        , Zoom:0x7E2}                 ; SetFocus:0x200
-    
+
     Static scn_id := this.p         ; NMHDR #2              ; ptr               ; SCNotification offsets
          , scn_wmmsg := this.p * 2  ; NMHDR #3              ; uint              verified:  13/22 members (not counting NMHDR)
          , scn_pos := (this.p=4)                ? 12 : 24   ; int Sci_Position  <-- verified offset
@@ -62,7 +62,7 @@ class Scintilla extends Gui.Custom {
          , scn_updated := (this.p=4)            ? 88 : 144  ; int               <-- verified offset
          , scn_listCompletionMethod:=(this.p=4) ? 92 : 148  ; int                   need user list or auto-complete to verify
          , scn_characterSource := (this.p=4)    ? 96 : 152  ; int                   need IME input to verify this
-    
+
     Static sc_eol := {Hidden:0
                     , Standard:0x1
                     , Boxed:0x2
@@ -75,11 +75,11 @@ class Scintilla extends Gui.Custom {
                     , CircleAngle:0x120     ; ( ... >
                     , FlatAngle:0x121       ; | ... >
                     , Angles:0x122}         ; < ... >
-    
+
     Static sc_mod := {Ctrl:2, Alt:4, Shift:1, Meta:16, Super:8}
-    
+
     Static sc_updated := {Content:0x1, Selection:2, VScroll:4, HScroll:8}
-    
+
     Static sc_marker := {Circle:0x0
                        , RoundRect:0x1
                        , Arrow:0x2
@@ -114,7 +114,7 @@ class Scintilla extends Gui.Custom {
                        , Bookmark:0x1F
                        , VerticalBookmark:0x20
                        , Character:0x2710}
-    
+
     Static sc_MarkerNum := {FolderEnd:0x19
                           , FolderOpenMid:0x1A
                           , FolderMidTail:0x1B
@@ -122,17 +122,17 @@ class Scintilla extends Gui.Custom {
                           , FolderSub:0x1D
                           , Folder:0x1E
                           , FolderOpen:0x1F}
-    
+
     Static sc_modType := {None:0                    ; SCN members affected below...
                         , InsertText:0x1            ; pos, length, text, linesAdded
                         , DeleteText:0x2            ; pos, length, text, linesAdded
                         , ChangeStyle:0x4           ; pos, length
                         , ChangeFold:0x8            ; line, foldLevelNow, foldLevelPrev
-                        , User:0x10                 ; 
-                        , Undo:0x20                 ; 
-                        , Redo:0x40                 ; 
-                        , MultiStepUndoRedo:0x80    ; 
-                        , LastStepInUndoRedo:0x100  ; 
+                        , User:0x10                 ;
+                        , Undo:0x20                 ;
+                        , Redo:0x40                 ;
+                        , MultiStepUndoRedo:0x80    ;
+                        , LastStepInUndoRedo:0x100  ;
                         , ChangeMarker:0x200        ; line
                         , BeforeInsert:0x400        ; pos, if user, text in bytes, length in bytes
                         , BeforeDelete:0x800        ; position, length
@@ -143,11 +143,11 @@ class Scintilla extends Gui.Custom {
                         , ChangeMargin:0x10000      ; line
                         , ChangeAnnotation:0x20000  ; line
                         , InsertCheck:0x100000      ; position, length, text
-                        , MultiLineUndoRedo:0x1000  ; 
-                        , StartAction:0x2000        ; 
+                        , MultiLineUndoRedo:0x1000  ;
+                        , StartAction:0x2000        ;
                         , Container:0x40000}        ; token
-                        ; , EventMaskAll:0x1FFFFF}    ; 
-    
+                        ; , EventMaskAll:0x1FFFFF}    ;
+
     Static sc_search := {None:0x0               ; Default, case-insensitive match.
                        , WholeWord:0x2          ; Matches whole word, see Words.WordChars
                        , MatchCase:0x4
@@ -157,43 +157,43 @@ class Scintilla extends Gui.Custom {
                                                 ;   Don't use with CXX11.
                        , CXX11RegEx:0x800000}   ; Need to test to see if this will be simple enough to use in AHK.
                                                 ;   This should be the closest to AHK RegEx.  Requires RegXP to also be set.
-    
+
     Static charset := {8859_15:0x3E8,ANSI:0x0,ARABIC:0xB2,BALTIC:0xBA,CHINESEBIG5:0x88,CYRILLIC:0x4E3,DEFAULT:0x1
                       ,EASTEUROPE:0xEE,GB2312:0x86,GREEK:0xA1,HANGUL:0x81,HEBREW:0xB1,JOHAB:0x82,MAC:0x4D,OEM:0xFF
                       ,OEM866:0x362,RUSSIAN:0xCC,SHIFTJIS:0x80,SYMBOL:0x2,THAI:0xDE,TURKISH:0xA2,VIETNAMESE:0xA3}
-    
+
     Static cp := Map("UTF-8",65001, "Japanese Shift_JIS",932, "Simplified Chinese GBK",936 ; CodePages
                    , "Korean Unified Hangul Code",949, "Traditional Chinese Big5",950
                    , "Korean Johab",1361)
-    
+
     Static __New() {                                                        ; Need to do it this way.
         Gui.Prototype.AddScintilla := ObjBindMethod(this,"AddScintilla")    ; Multiple gui subclass extensions don't play well together.
-        
+
         scint_path := A_LineFile "\..\Scintilla.dll" ; Set this as needed.
-        
+
         If !(this.hModule := DllCall("LoadLibrary", "Str", scint_path, "UPtr")) {    ; load dll, make sure it works
-            MsgBox "Scintilla DLL not found.`n`nModify the path to the appropriate location for your script.`n" 
+            MsgBox "Scintilla DLL not found.`n`nModify the path to the appropriate location for your script.`n"
             ExitApp
         }
-        
+
         custom_lexer := A_LineFile "\..\CustomLexer.dll" ; change this path as needed (if you choose to move the DLL)
         If !DllCall("LoadLibrary", "Str", custom_lexer, "UPtr") {
             Msgbox "CustomLexer.dll not found."
             ExitApp
         }
-        
+
         ; Scintilla.scint_base.Prototype._sms := Scintilla.scint_base.Prototype.__sms_slow
-        
+
         For prop in Scintilla.scint_base.prototype.OwnProps() ; attach utility methods to prototype
             If !(SubStr(prop,1,2) = "__") And (SubStr(prop,1,1) = "_")
                 this.Prototype.%prop% := Scintilla.scint_base.prototype.%prop%
-        
+
     }
     Static AddScintilla(_gui, sOptions) {
         DefaultOpt := false
         DefaultTheme := false
         LightTheme := false
-        
+
         opt_arr := StrSplit(sOptions," ")
         sOptions := ""
         For i, str in opt_arr {
@@ -206,23 +206,23 @@ class Scintilla extends Gui.Custom {
             Else
                 sOptions .= (sOptions?" ":"") str
         }
-        
+
         ctl := _gui.Add("Custom","ClassScintilla " sOptions)
         ctl.base := Scintilla.Prototype ; attach methods (but not static ones)
-        
+
         ; ======================================================================
         ; Init CustomLexer DLL functions for using scint control in AHK script and get Direct Func/Ptr
         ; ======================================================================
         buf := Buffer(8,0)
         NumPut("UPtr", ctl.hwnd, buf)
         result := DllCall("CustomLexer\Init","UPtr",ctl.hwnd,"UPtr") ; init DLL and get direct func/ptr
-        
+
         ; ======================================================================
         ; Register main SCN notification callback
         ; ======================================================================
         ctl.msg_cb := ObjBindMethod(ctl, "wm_messages") ; Register wm_notify messages
         OnMessage(0x4E, ctl.msg_cb)
-        
+
         ; ======================================================================
         ; Init some settings
         ; ======================================================================
@@ -234,7 +234,7 @@ class Scintilla extends Gui.Custom {
         ctl._UseDirect := false ; set some defaults...
         ctl._DirectPtr := 0
         ctl.LastCode := 0       ; like LastError, captures the return codes of messages sent, if any
-        
+
         ctl._AutoSizeNumberMargin := false
         ctl._AutoBraceMatch := false
         ctl._AutoPunctColor := false
@@ -250,23 +250,23 @@ class Scintilla extends Gui.Custom {
         ctl.SyntaxString1 := Chr(34)
         ctl.SyntaxString2 := "'"
         ctl.CaseSense := false
-                
+
         ; ==============================================
         ; Custom Syntax Highlighting properties
         ; ==============================================
         ctl.CustomSyntaxHighlighting := false
-        
+
         ; =============================================
         ; attach main objects to Scintilla control
         ; =============================================
         ctl.init_classes()
-        
+
         ; ====================================================
         ; These 2 settings are recommended for modern systems.
         ; ====================================================
         ctl.BufferedDraw := 0   ; disable buffering for Direct2D
         ctl.SetTechnology := 2  ; use Direct2D
-        
+
         ; ==========================================================================================
         ; These 2 methods are not required.  These only apply the settings that I prefer to use with
         ; Scintilla.  You can modify the code in these methods to your requirements.
@@ -277,7 +277,7 @@ class Scintilla extends Gui.Custom {
             ctl.DefaultTheme()
         If LightTheme
             ctl.LightTheme()
-        
+
         return ctl
     }
     init_classes() {
@@ -315,9 +315,9 @@ class Scintilla extends Gui.Custom {
         this.WhiteSpace := Scintilla.WhiteSpace(this)
         this.Word := Scintilla.Word(this)
         this.Wrap := Scintilla.Wrap(this)
-        
+
         this.cust := Scintilla.cust(this)
-        
+
         ; ====================================================
         ; Setup keyword lists
         ; ====================================================
@@ -342,22 +342,22 @@ class Scintilla extends Gui.Custom {
     Static RGB(R, G, B) {
         return Format("0x{:06X}",(R << 16) | (G << 8) | B)
     }
-    
+
     wm_messages(wParam, lParam, msg, hwnd) {
         Static modType := Scintilla.sc_modType
-        
+
         scn := Scintilla.SCNotification(lParam)
         scn.LineBeforeInsert := this.CurLine
         scn.LinesBeforeInsert := this.Lines
-        
+
         ; _scn := {hwnd:scn.hwnd
                ; , id:scn.id
                ; , wmmsg:scn.wmmsg
-               ; , pos:scn.pos ; 
+               ; , pos:scn.pos ;
                ; , ch:scn.ch
                ; , mod:scn.mod
                ; , modType:scn.modType
-               ; , text:scn.text ; 
+               ; , text:scn.text ;
                ; , length:scn.length
                ; , linesAdded:scn.linesAdded ;
                ; , message:scn.message
@@ -375,202 +375,202 @@ class Scintilla extends Gui.Custom {
                ; , updated:scn.updated ;
                ; , listCompletionMethod:scn.listCompletionMethod
                ; , characterSource:scn.characterSource}
-        
+
         event := scn.wmmsg_txt := Scintilla.Lookup("wm_notify", (msg_num := scn.wmmsg))
-        
+
         ; =========================================================================
         ; Easy events: Comment any of these out if you want to fine-tune function
         ; or performance in the user callback manually.
         ; =========================================================================
-        
+
         If (this.AutoSizeNumberMargin)
             this.MarginWidth(0, 33, scn) ; number margin 0, with default style 33
-        
+
         If (this.CustomSyntaxHighlighting) {
-            
+
             data := this.scn_data(scn) ; prep data for DLL calls
             ; wordList := this.makeWordLists()
-            
+
             If (scn.modType & modType.InsertText)                           ; Captures text editing and scrolling
                 || (event = "UpdateUI" && (scn.updated=4 || scn.updated=8)) {
-            
+
                 If (event = "Modified") && (scn.length > 1) { ; && (scn.linesAdded) { ; paste or document load operation
                     ticks := A_TickCount
                     result := this.ChunkColoring(scn, data, this._wordList)
                     dbg_scintilla( "ChunkColoring Seconds:  " (A_TickCount - ticks) / 1000 " / result: " result)
-                } 
+                }
                 else if (event = "Modified") && (!scn.linesAdded) {
                 ; else if (event = "CharAdded") {
                     ticks := A_TickCount
                     result := this.ChunkColoring(scn, data, this._wordList)
                     dbg_scintilla( "Line Styling Seconds:  " (A_TickCount - ticks) / 1000 " / result: " result)
                 }
-                
+
             }
-            
+
             Else If (scn.modType & modType.BeforeDelete)
                 this.DeleteRoutine(scn, data)
             Else if (scn.modType & modType.DeleteText)
                 this.ChunkColoring(scn, data, this._wordList) ; redo coloring after delete
-        
+
             If (scn.wmmsg_txt = "StyleNeeded") {
                 ; ticks := A_TickCount
                 this.Pacify() ; pacify the StyleNeeded bit by styling the last char in the doc
                 ; dbg_scintilla( "StyleNeeded Seconds:  " (A_TickCount - ticks) / 1000 " / Last: " this.Styling.Last)
-                
+
             }
         }
-        
+
         ; =========================================================================
         ; User callback
         ; =========================================================================
-        
+
         If (this.callback)
             f := this.callback(scn)
     }
-    
+
     MarginWidth(margin:=0, style:=33, scn:="") {
         Static modType := Scintilla.sc_modType
-        
+
         If !scn || !((scn.wmmsg_txt = "Modified")
           && (scn.modType & modType.DeleteText || scn.modType & modType.InsertText))
             return
-        
+
         this.Style.ID := style
         this.Margin.ID := margin
         min_width := this.Margin.MinWidth
         width := this.TextWidth(this.Lines) + this.TextWidth("0")
-        
+
         this.Margin.Width := (width >= min_width) ? width : min_width
     }
-    
+
     Pacify() { ; End each notification by styling the last char in the doc to satisfy "StyleNeeded" event.
         _lastPos := this.Length-1
         , _style := this.GetStyle(_lastPos)
         , this._sms(0x7F0, (_lastPos), 0) ;  // SCI_STARTSTYLING
         , this._sms(0x7F1, 1, _style) ;  // SCI_SETSTYLING
     }
-    
+
     ; BraceInit(scn, _type) { ; benchmarking for C code equivalent in AHK -- NEW 1 -- avg 13 secs
         ; Static q := Chr(34)
-        
+
         ; startLine := this._sms(0x876, scn.pos, 0) ; // SCI_LINEFROMPOSITION
         ; startPos  := this._sms(0x877, startLine, 0) ; // SCI_POSITIONFROMLINE
         ; lineLen   := this._sms(0x92E, startLine, 0) ; // SCI_LINELENGTH
-        
+
         ; endPos    := !scn.linesAdded ? startPos + lineLen : scn.pos + scn.length
-        
+
         ; chunkLen  := endPos - startPos
-        
+
         ; docTextRange := this.GetTextRange(startPos, endPos)
         ;;;;;;;;;;;;;;;;;;;;;;;; , docTextRange := StrSplit(this.GetTextRange(startPos, endPos))
-        
-        
+
+
         ; , style_st := 0, style_check := 0, curPos := startPos, mPos := 0, charWidth := 0
-        
+
         ; , SCINT_NONE := 0
         ; , SCINT_STRING1 := 1
         ; , SCINT_STRING2 := 2
         ; , SCINT_COMMENT1 := 3
         ; , SCINT_COMMENT2 := 4
-        
+
         ; , style_type := "", curChar := "", prevChar := "", curStyle := SCINT_NONE
         ; , com1    := this.SyntaxCommentLine
         ; , com2a   := this.SyntaxCommentBlockA
         ; , com2b   := this.SyntaxCommentBlockB
         ; , escChar := this.SyntaxEscapeChar
-        
+
         ; Loop Parse docTextRange ; A_LoopField per char
         ;;;;;;;;;;;;;;;;;;;;;;;; For i, curChar in docTextRange
         ; {
             ; curPos += charWidth
             ; , curChar := A_LoopField
             ; , charWidth := StrPut(curChar,"UTF-8") - 1
-            
+
             ;;;;;;;;;;;;;;;;;;;;;;;;; , i := A_Index
             ;;;;;;;;;;;;;;;;;;;;;;;;; , ahk_pos := curPos + charWidth
-            
+
             ; switch (curStyle) {
-                
+
                 ; case (SCINT_STRING1):
-                    
+
                     ; if ((curChar != q && curPos != endPos-1) || prevChar == escChar) {
                         ; prevChar := curChar
                         ; continue
                     ; }
-                    
+
                     ; this._sms(0x7F0, (style_st), 0) ;  // SCI_STARTSTYLING
                     ; , this._sms(0x7F1, (curPos-style_st+1), this.cust.String1.ID) ;  // SCI_SETSTYLING
                     ; , curStyle := SCINT_NONE, style_st := 0
                     ; continue
-                    
+
                 ; case (SCINT_STRING2):
-                    
+
                     ; if ((curChar != "'" && curPos != endPos-1) || prevChar == escChar) {
                         ; prevChar := curChar
                         ; continue
                     ; }
-                    
+
                     ; this._sms(0x7F0, (style_st), 0) ;  // SCI_STARTSTYLING
                     ; , this._sms(0x7F1, (curPos-style_st+1), this.cust.String2.ID) ;  // SCI_SETSTYLING
                     ; , curStyle := SCINT_NONE, style_st := 0
                     ; continue
-                    
+
                 ; case (SCINT_COMMENT1):
-                
+
                     ; if (curChar = "`n") || (A_Index = chunkLen) {
                     ;;;;;;;;;;;;;;;;;;;;;;;;; if (curChar = "`n") || (i = chunkLen) {
                         ; this._sms(0x7F0, (style_st), 0) ;  // SCI_STARTSTYLING
                         ; , this._sms(0x7F1, (curPos-style_st+1), this.cust.Comment1.ID) ;  // SCI_SETSTYLING
                         ; , curStyle := SCINT_NONE, style_st := 0
-                        
+
                     ; }
-                    
+
                 ; case (SCINT_COMMENT2):
-                    
+
                     ; com2b_test := SubStr(docTextRange, A_Index, strLen(com2b))
                     ;;;;;;;;;;;;;;;;;;;;;;;;; com2b_test := this.sub_str(docTextRange, i, strLen(com2b))
-                    
+
                     ; if (com2b = com2b_test) {
                         ; this._sms(0x7F0, (style_st), 0) ;  // SCI_STARTSTYLING
                         ; , this._sms(0x7F1, (curPos-style_st+strlen(com2b)), this.cust.Comment2.ID) ;  // SCI_SETSTYLING
                         ; , curStyle := SCINT_NONE, style_st := 0
-                        
+
                     ; }
-                    
+
                 ; case (SCINT_NONE):
-                
+
                     ; com1_test := SubStr(docTextRange, A_Index, strLen(com1))
                     ; , com2a_test := SubStr(docTextRange, A_Index, strLen(com2a))
-                    
+
                     ;;;;;;;;;;;;;;;;;;;;;;;;; com1_test := this.sub_str(docTextRange, i, strLen(com1))
                     ;;;;;;;;;;;;;;;;;;;;;;;;; , com2a_test := this.sub_str(docTextRange, i, strLen(com2a))
-                    
+
                     ; if (curChar = q) {
                         ; curStyle := SCINT_STRING1, style_st := curPos
-                        
+
                     ; } else if (curChar = "'") {
                         ; curStyle := SCINT_STRING2, style_st := curPos
-                    
+
                     ;;;;;;;;;;;;;;;;;;;;;;;;; } else if (InStr(docTextRange, com1,, ahk_pos) = ahk_pos) {
                     ; } else if (com1 = com1_test) {
                         ; curStyle := SCINT_COMMENT1, style_st := curPos
-                    
+
                     ; } else if (com2a = com2a_test) {
                         ; curStyle := SCINT_COMMENT2, style_st := curPos
-                        
+
                     ; } else if (instr(this.Brace.Chars, curChar)) {
                         ; this._sms(0x7F0, (curPos), 0) ;  // SCI_STARTSTYLING
                         ; , this._sms(0x7F1, 1, this.cust.Brace.ID) ;  // SCI_SETSTYLING
-                        
+
                     ; }
-                    
+
             ; } ; // switch statement
-            
+
         ; }
-        
+
     ; }
-    
+
     setKeywords(p*) {
         Loop 8 {
             str := (p.Has(A_Index)) ? " " (this.CaseSense ? Trim(p[A_Index]) : Trim(StrLower(p[A_Index]))) " " : ""
@@ -578,25 +578,25 @@ class Scintilla extends Gui.Custom {
             this.kw%A_Index%_utf8 := Buffer(StrPut(str,"UTF-8"),0)
             StrPut(str,this.kw%A_Index%_utf8,"UTF-8")
         }
-        
+
         this._wordList := this.makeWordLists()
     }
     makeWordLists() {
         buf := Buffer(8 + (8 * A_PtrSize), 0)
-        
+
         Loop 8
             NumPut("Char", this.cust.kw%A_Index%.ID, buf, A_Index - 1)
-        
+
         Loop 8
             NumPut("UPtr", this.kw%A_Index%_utf8.ptr, buf, ((A_Index-1) * 8) + 8)
-        
+
         return buf
     }
-    
+
     scn_data(scn) { ; prep scn data for DLL call
         buf := (A_PtrSize=8) ? Buffer(96,0) : Buffer(60,0)
         NumPut("UInt", scn.pos, "UInt", scn.length, "UInt", scn.linesAdded, buf)
-        
+
         NumPut("UChar", this.cust.String1.ID, buf, 16)
         NumPut("UChar", this.cust.String2.ID, buf, 17)
         NumPut("UChar", this.cust.Comment1.ID, buf, 18)
@@ -605,76 +605,76 @@ class Scintilla extends Gui.Custom {
         NumPut("UChar", this.cust.BraceHBad.ID, buf, 21)
         NumPut("UChar", this.cust.Punct.ID, buf, 22)
         NumPut("UChar", this.cust.Number.ID, buf, 23)
-        
+
         braceStr := Buffer(StrPut(this.Brace.Chars,"UTF-8"),0)
         StrPut(this.Brace.Chars,braceStr,"UTF-8")
         NumPut("UPtr", braceStr.ptr, buf, 24)
-        
+
         comment1 := Buffer(StrPut(this.SyntaxCommentLine,"UTF-8"),0)
         StrPut(this.SyntaxCommentLine,comment1,"UTF-8")
         NumPut("UPtr", comment1.ptr, buf, (A_PtrSize=8)?32:28)
-        
+
         comment2a := Buffer(StrPut(this.SyntaxCommentBlockA,"UTF-8"),0)
         StrPut(this.SyntaxCommentBlockA,comment2a,"UTF-8")
         NumPut("UPtr", comment2a.ptr, buf, (A_PtrSize=8)?40:32)
-        
+
         comment2b := Buffer(StrPut(this.SyntaxCommentBlockB,"UTF-8"),0)
         StrPut(this.SyntaxCommentBlockB,comment2b,"UTF-8")
         NumPut("UPtr", comment2b.ptr, buf, (A_PtrSize=8)?48:36)
-        
+
         escapeChar := Buffer(StrPut(this.SyntaxEscapeChar,"UTF-8"),0)
         StrPut(this.SyntaxEscapeChar,escapeChar,"UTF-8")
         NumPut("UPtr", escapeChar.ptr, buf, (A_PtrSize=8)?56:40)
-        
+
         punctChar := Buffer(StrPut(this.SyntaxPunctChars,"UTF-8"),0)
         StrPut(this.SyntaxPunctChars,punctChar,"UTF-8")
         NumPut("UPtr", punctChar.ptr, buf, (A_PtrSize=8)?64:44)
-        
+
         str1 := Buffer(StrPut(this.SyntaxString1,"UTF-8"),0)
         StrPut(this.SyntaxString1,str1,"UTF-8")
         NumPut("UPtr", str1.ptr, buf, (A_PtrSize=8)?72:48)
-        
+
         str2 := Buffer(StrPut(this.SyntaxString2,"UTF-8"),0)
         StrPut(this.SyntaxString2,str2,"UTF-8")
         NumPut("UPtr", str2.ptr, buf, (A_PtrSize=8)?80:52)
-        
+
         wordChars := Buffer(StrPut(this.SyntaxWordChars,"UTF-8"),0)
         StrPut(this.SyntaxWordChars,wordChars,"UTF-8")
         NumPut("UPtr", wordChars.ptr, buf, (A_PtrSize=8)?88:56)
-        
+
         return buf
     }
-    
+
     ChunkColoring(scn, data, wordList) { ; the DLL -- avg = 0.68 secs
         result := DllCall("CustomLexer\ChunkColoring","UPtr",data.ptr,"Int",this.loading,"UPtr", wordList.ptr,"Int",this.CaseSense)
-        
+
         this.loading := 0 ; reset "loading" status
-        
+
         return result
     }
-    
+
     DeleteRoutine(scn, data) { ; the DLL -- avg = 0.68 secs
-        return DllCall("CustomLexer\DeleteRoutine", "UPtr", data.ptr)
+        ; return DllCall("CustomLexer\DeleteRoutine", "UPtr", data.ptr)
     }
-    
+
     DefaultOpt() {
         ; this.UseDirect := true
-        
+
         this.Wrap.Mode := 1
         this.EndAtLastLine := false ; allow scrolling past last line
         this.Caret.PolicyX(13,50) ; SLOP:=1 | EVEN:=8 | STRICT:=4
         this.Caret.LineVisible := true   ; allow different active line back color
-        
+
         this.Margin.ID := 0      ; number margin
         this.Margin.Style(0,33)  ; set style .Style(line, style)
         this.Margin.Width := 20  ; 20 px number margin
-        
+
         this.Margin.ID := 1
         this.Margin.Sensitive := true
-        
+
         this.Tab.Use := false ; use spaces instad of tabs
         this.Tab.Width := 4 ; number of spaces for a tab
-        
+
         this.Selection.Multi := true ; allow multli-select, hold CTRL to add selection on left-click
         this.Selection.MultiTyping := true ; type during multi-selection
         this.Selection.RectModifier := 4 ; alt + drag for rect selection
@@ -683,31 +683,31 @@ class Scintilla extends Gui.Custom {
 
     DefaultTheme() {
         this.cust.Caret.LineBack := 0x151515  ; active line (with caret)
-        
+
         this.cust.Editor.Back := 0x080808
         this.cust.Editor.Fore := 0xAAAAAA
         this.cust.Editor.Font := "Consolas"
         this.cust.Editor.Size := 12
-        
+
         this.Style.ClearAll() ; apply style 32
-        
+
         this.cust.Margin.Back := 0x202020
         this.cust.Margin.Fore := 0xAAAAAA
-        
+
         this.cust.Caret.Fore := 0x00FF00
         this.cust.Selection.Back := 0x550000
-        
+
         this.cust.Brace.Fore     := 0x0900ff ; basic brace color
         this.cust.BraceH.Fore    := 0x00FF00 ; brace color highlight
         this.cust.BraceHBad.Fore := 0xFF0000 ; brace color bad light
         this.cust.Punct.Fore     := 0x9090FF
         this.cust.String1.Fore   := 0x666666
         this.cust.String2.Fore   := 0x666666
-        
+
         this.cust.Comment1.Fore  := 0x008800 ; keeping comment color same
         this.cust.Comment2.Fore  := 0x008800 ; keeping comment color same
         this.cust.Number.Fore    := 0xFFFF00
-        
+
         this.cust.kw1.Fore := 0xc94969 ; flow - red - set keyword list colors, kw1 - kw8
         this.cust.kw2.Fore := 0x6b66ff ; funcion - blue
         this.cust.kw3.Fore := 0xbde03c ; method - light green
@@ -719,31 +719,31 @@ class Scintilla extends Gui.Custom {
     LightTheme() {
         this.cust.Caret.LineBack := 0xF6F9FC  ; active line (with caret)
         this.cust.Editor.Back := 0xFDFDFD
-    
+
         this.cust.Editor.Fore := 0x000000
         this.cust.Editor.Font := "Consolas"
         this.cust.Editor.Size := 10
-    
+
         this.Style.ClearAll() ; apply style 32
-    
+
         this.cust.Margin.Back := 0xF0F0F0
         this.cust.Margin.Fore := 0x000000
-    
+
         this.cust.Caret.Fore := 0x00FF00
         this.cust.Selection.Back := 0x398FFB
         this.cust.Selection.ForeColor := 0xFFFFFF
-    
+
         this.cust.Brace.Fore     := 0x5F6364 ; basic brace color
         this.cust.BraceH.Fore    := 0x00FF00 ; brace color highlight
         this.cust.BraceHBad.Fore := 0xFF0000 ; brace color bad light
         this.cust.Punct.Fore     := 0xA57F5B
         this.cust.String1.Fore   := 0x329C1B ; "" double quoted text
         this.cust.String2.Fore   := 0x329C1B ; '' single quoted text
-    
+
         this.cust.Comment1.Fore  := 0x7D8B98 ; keeping comment color same
         this.cust.Comment2.Fore  := 0x7D8B98 ; keeping comment color same
         this.cust.Number.Fore    := 0xC72A31
-    
+
         this.cust.kw1.Fore := 0x329C1B ; flow - set keyword list colors, kw1 - kw8
         this.cust.kw2.Fore := 0x1049BF ; funcion
         this.cust.kw2.Bold := true ; funcion
@@ -751,11 +751,11 @@ class Scintilla extends Gui.Custom {
         this.cust.kw3.Bold := true ; funcion
         this.cust.kw4.Fore := 0x3F8CD4 ; prop
         this.cust.kw5.Fore := 0xC72A31 ; vars
-    
+
         this.cust.kw6.Fore := 0xEC9821 ; directives
         this.cust.kw7.Fore := 0x2390B6 ; var decl
     }
-    
+
     class cust {
         __New(sup) {
             this.Number := Scintilla.cust.subItem(sup,45)
@@ -771,7 +771,7 @@ class Scintilla extends Gui.Custom {
             this.Caret := sup.Caret
             this.Margin := Scintilla.cust.subItem(sup,33)
             this.Editor := Scintilla.cust.subItem(sup,32)
-            
+
             this.kw1 := Scintilla.cust.subItem(sup,64)
             this.kw2 := Scintilla.cust.subItem(sup,65)
             this.kw3 := Scintilla.cust.subItem(sup,66)
@@ -781,14 +781,14 @@ class Scintilla extends Gui.Custom {
             this.kw7 := Scintilla.cust.subItem(sup,70)
             this.kw8 := Scintilla.cust.subItem(sup,71)
         }
-        
+
         class subItem {
             ID := 0, sup := ""
-            
+
             __New(sup,ID) {
                 this.sup := sup, this.ID := ID
             }
-            
+
             Fore {
                 get {
                     this.sup.Style.ID := this.ID
@@ -861,7 +861,7 @@ class Scintilla extends Gui.Custom {
             }
         }
     }
-    
+
     ; =========================================================================================
     ; I might not bother with these (for a while, or at all):
     ; =========================================================================================
@@ -887,11 +887,11 @@ class Scintilla extends Gui.Custom {
     ; SCI_SEARCHNEXT
     ; SCI_SEARCHPREV
     ; SCI_GETELEMENTBASECOLOUR(int = elemnt number) - gets "default color" for specified element
-    
+
     ; =========================================================================================
     ; Scintilla Control Content methods and properties
     ; =========================================================================================
-    
+
     AppendText(pos:="", text:="") {     ; caret is moved, screen not scrolled
         pos := (pos!="")?pos:this.CurPos
         return this._PutStr(0x8EA, pos, text) ; SCI_APPENDTEXT
@@ -941,7 +941,7 @@ class Scintilla extends Gui.Custom {
     GetChar(pos:="") {
         pos := (pos!="")?pos:this.CurPos
         return (pos<this.Length) ? this.GetTextRange(pos, this.NextCharPos(pos)) : ""
-        
+
         ; return this._sms(0x7D7, pos)    ; SCI_GETCHARAT
     }
     GetTextRange(start, end) {
@@ -1014,7 +1014,7 @@ class Scintilla extends Gui.Custom {
     PrevChar(pos, offset:=-1) {
         p1 := this.NextCharPos(pos, offset)
         return p1?this.GetChar(p1):""
-        
+
         ; return this.GetChar(this.PrevCharPos(pos))
     }
     PrevCharPos(pos, offset:=-1) {
@@ -1032,11 +1032,11 @@ class Scintilla extends Gui.Custom {
         style := (style!="")?style:this.Style.ID
         return this._PutStr(0x8E4, style, txt)    ; SCI_TEXTWIDTH
     }
-    
+
     ; =========================================================================================
     ; Scintilla Control Actions
     ; =========================================================================================
-    
+
     Clear() {
         return this._sms(0x884) ; SCI_CLEAR
     }
@@ -1083,22 +1083,22 @@ class Scintilla extends Gui.Custom {
     ZoomOUT() {
         return this._sms(0x91E)         ; SCI_ZOOMOUT
     }
-    
+
     ; =========================================================================================
     ; Scintilla Control Undo/Redo
     ; =========================================================================================
-    
+
     AddUndo(token, flags:=1) {                  ; token is sent in SCN_MODIFIED notification
         return this._sms(0xA00, token, flags)   ; SCI_ADDUNDOACTION
     }                                           ; flags: 1=COALESCE, 0=NONE
-    
+
     CanUndo {
         get => this._sms(0x87E) ; SCI_CANUNDO
     }
     CanRedo {
         get => this._sms(0x7E0) ; SCI_CANREDO
     }
-    
+
     BeginUndo() {
         return this._sms(0x81E) ; SCI_BEGINUNDOACTION
     }
@@ -1118,11 +1118,11 @@ class Scintilla extends Gui.Custom {
     UndoEmpty() {
         return this._sms(0x87F) ; SCI_EMPTYUNDOBUFFER
     }
-    
+
     ; =========================================================================================
     ; Scintilla Control Status
     ; =========================================================================================
-    
+
     CanPaste {
         get => this._sms(0x87D) ; SCI_CANPASTE
     }
@@ -1139,11 +1139,11 @@ class Scintilla extends Gui.Custom {
     Status {
         get => this._StatusD
     }
-    
+
     ; =========================================================================================
     ; Scintilla Control Settings
     ; =========================================================================================
-    
+
     Accessibility {                     ; int 0 = disabled, 1 = enabled
         get => this._sms(0xA8F)         ; SCI_GETACCESSIBILITY
         set => this._sms(0xA8E, value)  ; SCI_SETACCESSIBILITY
@@ -1255,11 +1255,11 @@ class Scintilla extends Gui.Custom {
         get => this._UsePopup
         set => this._sms(0x943, (this._UsePopup := value))  ; SCI_USEPOPUP
     }
-    
+
     ; =========================================================================================
     ; Scintilla internals, suggested not to use directly, unless you want advanced contlrol
     ; =========================================================================================
-    
+
     DirectFunc { ; used internally
         get => Scintilla.DirectFunc
     }
@@ -1269,11 +1269,11 @@ class Scintilla extends Gui.Custom {
     DirectStatusFunc { ; used internally
         get => Scintilla.DirectStatusFunc
     }
-    
+
     ; =========================================================================================
     ; Scintilla Control manual direct access
     ; =========================================================================================
-    
+
     CharacterPointer {
         get => this._sms(0x9D8)         ; SCI_GETCHARACTERPOINTER
     }
@@ -1288,31 +1288,31 @@ class Scintilla extends Gui.Custom {
         set {
             If (!Scintilla.DirectFunc And value=true) ; store in Scintilla class, once per module instance
                 Scintilla.DirectFunc := SendMessage(0x888, 0, 0, this.hwnd) ; SCI_GETDIRECTFUNCTION
-            
+
             If (!Scintilla.DirectStatusFunc And value=true)
                 Scintilla.DirectStatusFunc := SendMessage(0xAD4, 0, 0, this.hwnd) ; SCI_GETDIRECTSTATUSFUNCTION
-            
+
             If (!this.DirectPtr And value=true) ; store in ctl, call once per control
                 this._DirectPtr  := SendMessage(0x889, 0, 0, this.hwnd) ; SCI_GETDIRECTPOINTER
-            
+
             ; If (value)
                 ; Scintilla.scint_base.Prototype._sms := Scintilla.scint_base.Prototype.__sms_slow
             ; else
                 ; Scintilla.scint_base.Prototype._sms := Scintilla.scint_base.Prototype.__sms_fast
-            
+
             ; this.init_classes()
-            
+
             this._UseDirect := value
         }
     }
-    
+
     ; =========================================================================================
     ; Subclasses
     ; =========================================================================================
-    
+
     class Brace extends Scintilla.scint_base {
         Chars := "[]{}()<>"
-        
+
         BadColor {
             get {
                 this.Style.ID := 35
@@ -1352,7 +1352,7 @@ class Scintilla extends Gui.Custom {
             return this._sms(0x941, in_pos, start_pos) ; SCI_BRACEMATCHNEXT
         }
     }
-    
+
     class Caret extends Scintilla.scint_base {
         Blink {                             ; int milliseconds
             get => this._sms(0x81B)         ; SCI_GETCARETPERIOD
@@ -1441,7 +1441,7 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0x88C, value)  ; SCI_SETCARETWIDTH
         }
     }
-    
+
     class Doc extends Scintilla.scint_base {
         AddRef(doc_ptr) {
             return this._sms(0x948, 0, doc_ptr)     ; SCI_ADDREFDOCUMENT
@@ -1460,7 +1460,7 @@ class Scintilla extends Gui.Custom {
             return this._sms(0x949, 0, doc_ptr) ; SCI_RELEASEDOCUMENT
         }
     }
-    
+
     class Edge extends Scintilla.scint_base {
         __New(ctl) {
             this.ctl := ctl
@@ -1487,7 +1487,7 @@ class Scintilla extends Gui.Custom {
             get => this._sms(0x93A)         ; SCI_GETEDGEMODE
             set => this._sms(0x93B, value)  ; SCI_SETEDGEMODE
         }
-        
+
         class Multi extends Scintilla.scint_base {
             Add(pos, color) {       ; SCI_MULTIEDGEADDLINE
                 return this._sms(0xA86, pos, this._RGB_BGR(color))
@@ -1500,10 +1500,10 @@ class Scintilla extends Gui.Custom {
             }
         }
     }
-    
+
     class EOLAnn extends Scintilla.scint_base {
         Line := 0
-        
+
         ClearAll() {
             return this._sms(0xAB8)                         ; SCI_EOLANNOTATIONCLEARALL
         }
@@ -1524,13 +1524,13 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0xAB9, value)                  ; SCI_EOLANNOTATIONSETVISIBLE
         }
     }
-    
+
     class Hotspot extends Scintilla.scint_base {
         _BackColor := 0xFFFFFF
         _BackEnabled := true
         _ForeColor := 0x000000
         _ForeEnabled := true
-        
+
         Back(bool, color) {
             this._BackEnabled := bool,    this._BackColor := color
             return this._sms(0x96B, bool, this._RGB_BGR(color)) ; SCI_SETHOTSPOTACTIVEBACK
@@ -1564,7 +1564,7 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0x96C, value)  ; SCI_SETHOTSPOTACTIVEUNDERLINE
         }
     }
-    
+
     class LineEnding extends Scintilla.scint_base {
         Convert(mode) {                     ; mode -> 0 = CRLF, 1 = CR, 2 = LF
             return this._sms(0x7ED, mode)   ; SCI_CONVERTEOLS
@@ -1588,7 +1588,7 @@ class Scintilla extends Gui.Custom {
             get => this._sms(0xFB2)         ; SCI_GETLINEENDTYPESSUPPORTED
         }
     }
-    
+
     class Macro extends Scintilla.scint_base {
         Start() {
             return this._sms(0xBB9)         ; SCI_STARTRECORD
@@ -1597,7 +1597,7 @@ class Scintilla extends Gui.Custom {
             return this._sms(0xBBA)         ; SCI_STOPRECORD
         }
     }
-    
+
     class Margin extends Scintilla.scint_base {
         ID := 0
         _MinWidth := Map()
@@ -1605,7 +1605,7 @@ class Scintilla extends Gui.Custom {
         _FoldColor := 0
         _FoldHiColorEnabled := false
         _FoldHiColor := 0
-        
+
         Back {                                                      ; color
             get => this._RGB_BGR(this._sms(0x8CB, this.ID))         ; SCI_GETMARGINBACKN
             set => this._sms(0x8CA, this.ID, this._RGB_BGR(value))  ; SCI_SETMARGINBACKN
@@ -1683,7 +1683,7 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0x8C2, this.ID, value) ; SCI_SETMARGINWIDTHN
         }
     }
-    
+
     class Marker extends Scintilla.scint_base {
         num := 0
         _width := 0
@@ -1695,7 +1695,7 @@ class Scintilla extends Gui.Custom {
         _StrokeWidth := 100
         _HighlightEnabled := false
         _Alpha := 255
-        
+
         Add(line, markerNum:="") {                                              ; returns marker handle
             return this._sms(0x7FB, line, (markerNum!="")?markerNum:this.num)   ; SCI_MARKERADD
         }
@@ -1798,14 +1798,14 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0xA42, this.num, (Type(value)="Buffer")?value.ptr:value) ; SCI_MARKERDEFINERGBAIMAGE
         }
     }
-    
+
     class Punct extends Scintilla.scint_base {
         Chars { ; set/get punct chars
             get => this._GetStr(0xA59,,true)    ; SCI_GETPUNCTUATIONCHARS
             set => this._PutStr(0xA58,,value)   ; SCI_SETPUNCTUATIONCHARS
         }
     }
-    
+
     class Selection extends Scintilla.scint_base {  ; GET/SET ADDITIONALSELECTIONTYPING
         _BackColor := 0xFFFFFF
         _BackEnabled := true
@@ -1813,7 +1813,7 @@ class Scintilla extends Gui.Custom {
         _ForeEnabled := true
         _MultiBack := 0x000000
         _MultiFore := 0x000000
-        
+
         Add(anchor, caret) {                        ; adds selection with Multi-select enabled
             return this._sms(0xA0D, anchor, caret)  ; SCI_ADDSELECTION
         }
@@ -1851,8 +1851,8 @@ class Scintilla extends Gui.Custom {
             get => this._BackEnabled
             set => this._sms(0x814, (this._BackEnabled := value), this._RGB_BGR(this._BackColor)) ; SCI_SETSELBACK
         }
-        CaretPos(pos:="", sel:=0) {                 
-            If (pos="")                             
+        CaretPos(pos:="", sel:=0) {
+            If (pos="")
                 return this._sms(0xA11, sel)        ; SCI_GETSELECTIONNCARET (caret is were selection ends, may be on left)
             Else
                 return this._sms(0xA10, sel, pos)   ; SCI_SETSELECTIONNCARET (move carat, modifies selection)
@@ -1906,7 +1906,7 @@ class Scintilla extends Gui.Custom {
         }
         GetAll() {      ; For multi-select, gets selection in order, with CRLF breaks between selections.
             _str := ""  ; For rectangle select, ALWAYS gets top line first.
-            
+
             If (this.IsRect) And (this.RectAnchor > this.RectCaret) {
                 Loop (i := this.Count)
                     _str .= ((A_Index=1)?"":"`r`n") this.Get(i-1-(A_Index-1))
@@ -1949,7 +1949,7 @@ class Scintilla extends Gui.Custom {
             get => (0xFF000000 & this._MultiFore) ? Format("0x{:08X}", this._MultiFore) : Format("0x{:06X}", this._MultiFore)
             set => this._sms(0xA28, this._RGB_BGR(this._MultiFore := value))  ; SCI_SETADDITIONALSELFORE
         }
-        MultiPaste {                        ; int 0 = PASTE ONCE, 1 = PASTE EACH    
+        MultiPaste {                        ; int 0 = PASTE ONCE, 1 = PASTE EACH
             get => this._sms(0xA37)         ; SCI_GETMULTIPASTE
             set => this._sms(0xA36, value)  ; SCI_SETMULTIPASTE
         }
@@ -2010,7 +2010,7 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0xA24, value)  ; SCI_SETVIRTUALSPACEOPTIONS
         }
     }
-    
+
     class Style extends Scintilla.scint_base {
         ID := 32
         Back {                                                      ; color
@@ -2081,7 +2081,7 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0x80F, value)  ; SCI_STYLESETWEIGHT
         }
     }
-    
+
     class Styling extends Scintilla.scint_base {
         Clear() {                   ; clears styles AND folds
             return this._sms(0x7D5) ; SCI_CLEARDOCUMENTSTYLE
@@ -2112,7 +2112,7 @@ class Scintilla extends Gui.Custom {
             return this._sms(0x7F0, pos) ; SCI_STARTSTYLING
         }
     }
-    
+
     class Tab extends Scintilla.scint_base {
         Add(line, pixels) {                         ; int line / pixels
             return this._sms(0xA74, line, pixels)   ; SCI_ADDTABSTOP
@@ -2156,7 +2156,7 @@ class Scintilla extends Gui.Custom {
             get => this._sms(0x84D)         ; SCI_GETUSETABS
             set => this._sms(0x84C, value)  ; SCI_SETUSETABS
         }
-        
+
         ; ==============================================
         ; oddly similar me thinks...
         ; ==============================================
@@ -2169,7 +2169,7 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0x7F4, value)  ; SCI_SETTABWIDTH
         }
     }
-    
+
     class Target extends Scintilla.scint_base {
         All() {
             return this._sms(0xA82)         ; SCI_TARGETWHOLEDOCUMENT
@@ -2229,13 +2229,13 @@ class Scintilla extends Gui.Custom {
             get => this._GetStr(0xA7F)      ; SCI_GETTARGETTEXT
         }
     }
-    
+
     class WhiteSpace extends Scintilla.scint_base {
         _BackColor := 0xFFFFFF
         _BackEnabled := true
         _ForeColor := 0x000000
         _ForeEnabled := true
-        
+
         Back(bool, color) {
             this._BackEnabled := bool,    this._BackColor := color
             return this._sms(0x825, bool, this._RGB_BGR(color)) ; SCI_SETWHITESPACEBACK
@@ -2285,7 +2285,7 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0x7E5, value)  ; SCI_SETVIEWWS
         }
     }
-    
+
     class Word extends Scintilla.scint_base {
         CharCatOpt { ; int - see SCI_WORD* and SCI_DELWORD* constants
             get => this._sms(0xAA1)         ; SCI_GETCHARACTERCATEGORYOPTIMIZATION
@@ -2304,12 +2304,12 @@ class Scintilla extends Gui.Custom {
         IsRangeWord(start_pos, end_pos) {
             return this._sms(0xA83, start_pos, end_pos) ; SCI_ISRANGEWORD
         }
-        
+
         StartPos(start_pos, OnlyWordChars:=true) { ; get "start of word" pos from specified pos
             return this._sms(0x8DA, start_pos, OnlyWordChars)   ; SCI_WORDSTARTPOSITION
         }
     }
-    
+
     class Wrap extends Scintilla.scint_base {
         Count(line) { ; returns # of lines taken up by display for specified line
             return this._sms(0x8BB, line)   ; SCI_WRAPCOUNT
@@ -2339,7 +2339,7 @@ class Scintilla extends Gui.Custom {
             set => this._sms(0x99C, value)  ; SCI_SETWRAPVISUALFLAGS
         }
     }
-    
+
     class scint_base {
         LastCode := 0
         __New(ctl) { ; 1st param in subclass is parent class
@@ -2348,19 +2348,19 @@ class Scintilla extends Gui.Custom {
         _GetStr(msg, wParam:=0, reverse:=false) { ; get string with NULL terminator
             buf := Buffer(this._sms(msg, wParam) + 1, 0), out_str := ""
             this._sms(msg, wParam, buf.ptr)
-            
+
             If (reverse)
                 Loop (offset := buf.Size - 1)
                     If (_asc := NumGet(buf,offset - (A_Index-1),"UChar"))
                         out_str .= Chr(_asc)
-            
+
             return (reverse) ? out_str : StrGet(buf, "UTF-8")
         }
         _PutStr(msg, wParam:=0, str:="") { ; pass a string with NULL terminator
             str_size := StrPut(str,"UTF-8")
             buf := Buffer(str_size,0)
             StrPut(str,buf,"UTF-8")
-            
+
             return this._sms(msg, wParam, buf.ptr)
         }
         _SetStr(msg, wParam:=0, str:="") { ; pass a string without NULL terminator
@@ -2378,23 +2378,23 @@ class Scintilla extends Gui.Custom {
             Else
                 return Format("0x{:06X}",(_in & 0xFF) << 16 | (_in & 0xFF00) | (_in >> 16))
         }
-        
+
         ; __sms_slow(msg, wParam:=0, lParam:=0) {
             ; obj := (this.__Class = "Scintilla") ? this : this.ctl
             ; return r := SendMessage(msg, wParam, lParam, obj.hwnd)
         ; }
-        
+
         ; __sms_fast(msg, wParam:=0, lParam:=0) {
             ; obj := (this.__Class = "Scintilla") ? this : this.ctl
             ; r := DllCall(obj.DirectStatusFunc, "UPtr", obj.DirectPtr, "UInt", msg, "Int", wParam, "Int", lParam, "Int*", &status:=0)
             ; obj._StatusD := status
             ; return r ; every sub-class will have this element
         ; }
-        
+
         ; _sms(msg, wParam:=0, lParam:=0) {
-        
+
         ; }
-        
+
         _sms(msg, wParam:=0, lParam:=0) {
             obj := (this.__Class = "Scintilla") ? this : this.ctl
             ; status := 0
@@ -2405,10 +2405,10 @@ class Scintilla extends Gui.Custom {
             } Else {
                 r := SendMessage(msg, wParam, lParam, obj.hwnd)
             }
-            
+
             return (obj.LastCode := r) ; every sub-class will have this element
         }
-        
+
         _GetRect(_ptr, offset:=0) {
             a := []
             Loop 4
@@ -2418,12 +2418,12 @@ class Scintilla extends Gui.Custom {
         _SetRect(value, _ptr, offset:=0) {
             If (Type(value) != "Array") Or (value.Length != 4)
                 throw Error("Inalid input for this property.",,"The input for this property must be a linear array with 4 values:`r`n`r`n[1, 2, 3, 4]")
-            
+
             Loop 4
                 NumPut("UInt", value[A_Index], _ptr, offset + ((A_Index-1) * 4))
         }
     }
-    
+
     class CharRange {
         __New(ptr := 0) {
             If !ptr {
@@ -2444,7 +2444,7 @@ class Scintilla extends Gui.Custom {
             get => this.struct.ptr
         }
     }
-    
+
     class TextRange {
         _ptr := 0
         __New(ptr:=0) {
@@ -2457,7 +2457,7 @@ class Scintilla extends Gui.Custom {
             If (this.cpMax) {
                 If (this.cpMax < this.cpMin)
                     throw Error("Invalid range.",,"`r`ncpMin: " this.cpMin "`r`ncpMax: " this.cpMax)
-                
+
                 this.buf := Buffer(this.cpMax - this.cpMin + 2, 0)
                 this.lpText := this.buf.ptr
             }
@@ -2484,7 +2484,7 @@ class Scintilla extends Gui.Custom {
             get => (!this._ptr) ? this.struct.ptr : this._ptr
         }
     }
-    
+
     class SCNotification { ; SCNotification
         __New(ptr := 0) {
             this.ptr := ptr
@@ -2596,11 +2596,11 @@ myFunc() {
     ; int ch;                            |16/32          20/36
     ; int modifiers;                     |20/36          24/40
     ; int modificationType;              |24/40          28/44
-    ; const char *text;                  |28/48 <------- 32/56 --- x64 offset    
+    ; const char *text;                  |28/48 <------- 32/56 --- x64 offset
     ; Sci_Position length;               |32/56          36/64
     ; Sci_Position linesAdded;           |36/64          40/72
     ; int message;                       |40/72          44/76
-    ; uptr_t wParam;                     |44/80 <------- 48/88 --- x64 offset    
+    ; uptr_t wParam;                     |44/80 <------- 48/88 --- x64 offset
     ; sptr_t lParam;                     |48/88          52/96
     ; Sci_Position line;                 |52/96          56/104
     ; int foldLevelNow;                  |56/104         60/108

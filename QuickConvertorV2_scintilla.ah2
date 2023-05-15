@@ -2,12 +2,12 @@
 #SingleInstance Force
 #Requires AutoHotKey v2.0-beta.3
 __scintilla__:=true
-#Include bruh.ah2
+#Include %A_LineFile%\..\bruh.ah2
 Convert(str) {
     return aaa(str).converted
 }
-#Include <Scintilla>
-#Include <_GuiCtlExt>
+#Include %A_LineFile%\..\lib\Scintilla.ahk
+#Include %A_LineFile%\..\lib\_GuiCtlExt.ahk
 (Scintilla) ; Init class, or simply #INCLUDE the extension-lib at the top.
 global icons, TestMode, FontSize, ViewExpectedCode, GuiWidth, GuiHeight
 
