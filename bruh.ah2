@@ -1465,7 +1465,8 @@ AHK_parse(str) {
                                 }
                                 c_+=2
                                 skip_comments()
-                                return {type:"post-unary assignment", left:left, op:"++"} ;post-increment
+                                left:={type:"post-unary assignment", left:left, op:"++"} ;post-increment
+                                return do_operator()
                             case "=":
                                 return value_binary(left, "+=") ;add=>assign
                             default:
@@ -1480,7 +1481,8 @@ AHK_parse(str) {
                                 }
                                 c_+=2
                                 skip_comments()
-                                return {type:"post-unary assignment", left:left, op:"--"} ;post-decrement
+                                left:={type:"post-unary assignment", left:left, op:"--"} ;post-decrement
+                                return do_operator()
                             case "=":
                                 return value_binary(left, "-=") ;sub=>assign
                             default:
@@ -1786,6 +1788,7 @@ superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"A_IsAdmin",{vartype:"simply defined"}
     ,"A_IsCompiled",{vartype:"simply defined"}
     ,"A_LastError",{vartype:"simply defined"}
+    ,"A_LineFile",{vartype:"simply defined"}
     ,"A_ScriptFullPath",{vartype:"simply defined"}
     ,"A_ScriptName",{vartype:"simply defined"}
     ,"A_Space",{vartype:"simply defined"}
@@ -1842,6 +1845,7 @@ superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"WinGetExStyle",{vartype:"simply defined"}
     ,"WinGetList",{vartype:"simply defined"}
     ,"WinGetMinMax",{vartype:"simply defined"}
+    ,"WinGetID",{vartype:"simply defined"}
     ,"WinGetTitle",{vartype:"simply defined"}
     ,"WinGetClass",{vartype:"simply defined"}
     ,"WinGetProcessName",{vartype:"simply defined"}
@@ -4263,8 +4267,9 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("pre-increment.ahk"))
 ; bbb:=aaa(FileRead("askForHelp1.ahk"))
 ; bbb:=aaa(FileRead("GooglePhraseFix.ahk"))
-bbb:=aaa(FileRead("Biga.ahk"))
+; bbb:=aaa(FileRead("Biga.ahk"))
 ; bbb:=aaa(FileRead("tooManyArgs.ahk"))
+bbb:=aaa(FileRead("while i goes to 1.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
