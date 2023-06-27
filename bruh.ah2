@@ -90,39 +90,10 @@ AHK_parse(str) {
             case ",":
                 ; a:=1,b:=2
                 ; or the cursed: Return "", ErrorLevel := 1
-                if (currentArr[currentArr.Length].type=="command") {
-                    ; rip
-                    if (currentArr.Length > 1) {
-                        if (currentArr[currentArr.Length - 1].type == "else without block") {
-                            currentArr[currentArr.Length - 1].type := "else with block"
-                        } else if (currentArr[currentArr.Length - 1].type == "catch without block") {
-                            currentArr[currentArr.Length - 1].type := "catch with block"
-                        } else if (currentArr[currentArr.Length - 2].type == "if without block") {
-                            currentArr[currentArr.Length - 2].type := "if with block"
-                            currentArr[currentArr.Length - 1] := {type: "condition with block",expr:currentArr[currentArr.Length - 1]}
-                        } else {
-                            c_++
-                            skip_comments()
-                            toPush:=value_expression()
-                            currentArr.InsertAt(currentArr.Length, toPush)
-                            continue statements_loop
-                        }
-                        c_++
-                        skip_comments()
-                        toPush:=value_expression()
-                        currentArr[currentArr.Length]:={type:"block", statements: [toPush, currentArr[currentArr.Length]]}
-                    } else {
-                        c_++
-                        skip_comments()
-                        toPush:=value_expression()
-                        currentArr.InsertAt(1, toPush)
-                    }
-                } else {
-                    c_++
-                    skip_comments()
-                    toPush:=value_expression()
-                    currentArr[currentArr.Length]:={type:"comma multi-statement", left:currentArr[currentArr.Length], right:toPush}
-                }
+                c_++
+                skip_comments()
+                toPush:=value_expression()
+                currentArr[currentArr.Length]:={type:"comma multi-statement", left:currentArr[currentArr.Length], right:toPush}
             default:
                 ; function call
                 ; function definition
@@ -2334,17 +2305,50 @@ walker_replacer() {
                 , "concat":
                     finalStr.=do(statements, k_) "`n"
                 case "comma multi-statement":
+                    doDo:=true
                     t_:=v_
+                    o_:=v_
                     commaStatementsCount:=2
                     while (t_.left.type=="comma multi-statement") {
+                        o_:=t_
                         t_:=t_.left
                         ++commaStatementsCount
                     }
                     if (commaStatementsCount==2 && t_.left.type=="binary" && t_.left.op=="-=" && t_.right.type=="variable") {
                         replacement:={left:t_.left.left,op:":=",right:{args:[t_.left.left,t_.left.right,{type:"string",value:t_.right.value}],func:{type:"variable",value:"DateDiff"},type:"function call"},type:"binary"}
                         statements[k_]:=replacement
+                    } else if (t_.left.type=="command" && t_.left._name="return") {
+
+                        loop 1 {
+                            doDo:=false
+                            tempVar:=getNextTempVariable()
+                            retValBak:=t_.left.args[1]
+                            t_.left.args[1]:=tempVar
+                            if (o_==t_) {
+                                v_:=o_.right
+                            } else {
+                                o_.left := t_.right
+                            }
+                            if (statements.Length > 1 && k_ > 1 && statements[k_ - 1].type == "else without block") {
+                                statements[k_ - 1].type := "else with block"
+                            } else if (statements.Length > 1 && k_ > 1 && (statements[k_ - 1].type == "try without block" || (statements[k_ - 1].type=="command" && statements[k_ - 1]._name="try"))) {
+                                statements[k_ - 1] := {type:"try with block"}
+                            } else if (statements.Length > 1 && k_ > 1 && statements[k_ - 1].type == "catch without block") {
+                                statements[k_ - 1].type := "catch with block"
+                            } else if (statements.Length > 2 && k_ > 2 && statements[k_ - 2].type == "if without block") {
+                                statements[k_ - 2].type := "if with block"
+                                statements[k_ - 1] := {type: "condition with block",expr:statements[k_ - 1]}
+                            } else {
+                                statements[k_]:={left:tempVar,op:":=",right:retValBak,type:"binary"}
+                                statements.InsertAt(k_ + 1, v_, t_.left)
+                                break
+                            }
+                            statements[k_]:={type:"block", statements: [{left:tempVar,op:":=",right:retValBak,type:"binary"}, v_, t_.left]}
+                        }
                     }
-                    finalStr.=do(statements, k_) "`n"
+                    if (doDo) {
+                        finalStr.=do(statements, k_) "`n"
+                    }
                 case "var scope declaration":
                     finalStr.=v_.value " "
                     v_:=statements[++k_]
@@ -4226,6 +4230,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("RunAsTask.ahk"))
 ; bbb:=aaa(FileRead("Return comma ErrorLevel assignment.ahk"))
 ; bbb:=aaa(FileRead("Return comma ErrorLevel assignment2.ahk"))
+bbb:=aaa(FileRead("Return comma ErrorLevel assignment3.ahk"))
 ; bbb:=aaa(FileRead("string continuation section.ahk"))
 ; bbb:=aaa(FileRead("RunCMD.ahk"))
 ; bbb:=aaa(FileRead("File.ReadLine.ahk"))
@@ -4269,7 +4274,8 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("GooglePhraseFix.ahk"))
 ; bbb:=aaa(FileRead("Biga.ahk"))
 ; bbb:=aaa(FileRead("tooManyArgs.ahk"))
-bbb:=aaa(FileRead("while i goes to 1.ahk"))
+; bbb:=aaa(FileRead("while i goes to 1.ahk"))
+; bbb:=aaa(FileRead("LiveThumb.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
