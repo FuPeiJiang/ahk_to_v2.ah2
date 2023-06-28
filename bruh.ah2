@@ -2776,7 +2776,26 @@ walker_replacer() {
                     }
                     return notValueButString
                 case "array access":
-                    ;the order of this may cause problems
+                    doReplace:=false
+                    if (Type(obj) == "Object") {
+                        if (obj.type == "condition with block") {
+                            doReplace:=true
+                        }
+                    } else {
+                        if (key > 1 && obj[key - 1].type == "if without block") {
+                            doReplace:=true
+                        }
+                    }
+                    if (doReplace) {
+                        replacement:={args:[t_.key],func:{parent:t_.parent,propName:"Has",type:"property access"},type:"function call"}
+                        if (Type(obj) == "Object") {
+                            obj.%key%:=replacement
+                        } else {
+                            obj[key]:=replacement
+                        }
+                        return do(obj, key)
+                    }
+                    ;the order of this may cause problem
                     return do(t_, "parent") "[" do(t_, "key") "]"
                 case "group":
                     return "(" do(t_, "value") ")"
@@ -3294,15 +3313,15 @@ walker_replacer() {
                             e_.type:="obj key"
                         }
                     }
-                    if (t_.keys.Length) {
-                        argsStr.=do(t_.keys, 1) ":" do(t_.values, 1)
-                        i_:=2, len:=t_.keys.Length + 1
-                        while (i_<len) {
-                            argsStr.=", " do(t_.keys, i_) ":" do(t_.values, i_)
-                            i_++
+                    outer1:
+                    loop 1 {
+                        for e_ in t_.values {
+                            if (!(e_.type=="hex number" || e_.type=="number")) {
+                                break outer1
+                            }
                         }
-                    } else {
                         ; {} -> Map()
+                        ; {a:number...,b:hex number...} -> Map(...)
                         replacement:={args:[],func:{type:"variable",value:"Map"},type:"function call"}
                         if (Type(obj) == "Object") {
                             obj.%key%:=replacement
@@ -3310,6 +3329,12 @@ walker_replacer() {
                             obj[key]:=replacement
                         }
                         return do(obj,key)
+                    }
+                    argsStr.=do(t_.keys, 1) ":" do(t_.values, 1)
+                    i_:=2, len:=t_.keys.Length + 1
+                    while (i_<len) {
+                        argsStr.=", " do(t_.keys, i_) ":" do(t_.values, i_)
+                        i_++
                     }
                     return "{" argsStr "}"
                 case "array":
@@ -4230,7 +4255,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("RunAsTask.ahk"))
 ; bbb:=aaa(FileRead("Return comma ErrorLevel assignment.ahk"))
 ; bbb:=aaa(FileRead("Return comma ErrorLevel assignment2.ahk"))
-bbb:=aaa(FileRead("Return comma ErrorLevel assignment3.ahk"))
+; bbb:=aaa(FileRead("Return comma ErrorLevel assignment3.ahk"))
 ; bbb:=aaa(FileRead("string continuation section.ahk"))
 ; bbb:=aaa(FileRead("RunCMD.ahk"))
 ; bbb:=aaa(FileRead("File.ReadLine.ahk"))
@@ -4276,6 +4301,8 @@ bbb:=aaa(FileRead("Return comma ErrorLevel assignment3.ahk"))
 ; bbb:=aaa(FileRead("tooManyArgs.ahk"))
 ; bbb:=aaa(FileRead("while i goes to 1.ahk"))
 ; bbb:=aaa(FileRead("LiveThumb.ahk"))
+; bbb:=aaa(FileRead("class get set.ahk"))
+bbb:=aaa(FileRead("if array access.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
