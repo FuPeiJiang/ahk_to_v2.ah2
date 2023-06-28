@@ -1211,6 +1211,11 @@ AHK_parse(str) {
                         toPush:=value_expression()
                         if (toPush.type == "variable") {
                             toPush.type:="obj key"
+                        } else if (toPush.type == "string") {
+                            toPush.type:="obj key"
+                            if (!(toPush.value ~= "^[%a-zA-Z0-9_#@$\x80-\x{10ffff}]*$")) {
+                                toPush.value:="%`"" toPush.value "`"%"
+                            }
                         }
                         keys.Push(toPush)
 
@@ -1847,6 +1852,7 @@ walker_superGlobalVars() {
 
         statements_len:=statements.Length + 1
         k_:=1
+        kStatic:=0
         while (k_ < statements_len) {
             v_:=statements[k_]
             finalStr.=indent
@@ -1863,6 +1869,24 @@ walker_superGlobalVars() {
                         } else {
                             superGlobalVarsMap[v_.func.value]:={vartype:"simply defined",possiblyFunc:v_}
                         }
+                    }
+                case "comma multi-statement":
+                    if (k_==kStatic) {
+                        loop {
+                            classKeysArr[classKeysArr.Length].Push({propName:v_.right.left.value,varInfo:{vartype:"simply defined",possiblyFunc:v_.right.right}})
+                            if (!(v_.left.type == "comma multi-statement")) {
+                                break
+                            }
+                            v_:=v_.left
+                        }
+                    }
+                case "binary":
+                    if (k_==kStatic) {
+                        classKeysArr[classKeysArr.Length].Push({propName:v_.left.value,varInfo:{vartype:"simply defined",possiblyFunc:v_.right}})
+                    }
+                case "var scope declaration":
+                    if (v_.value=="static") {
+                        kStatic:=k_+1
                     }
                 case "class":
                     keys:=[]
@@ -2384,28 +2408,66 @@ walker_replacer() {
 
                     v_:=statements[++k_]
 
+                    kBak:=k_
+                    vBak:=v_
+                    statementsBak:=statements
+
                     isStatic:=true
-                    for possiblyFunc in v_.statements {
-                        if (possiblyFunc.type == "function definition") {
-                            currentScope["this"].keys.push({propName:possiblyFunc.func.value,varInfo:{vartype:"simply defined",possiblyFunc:possiblyFunc}})
-                            switch (possiblyFunc.func.value), 0 {
-                                case "__New", "__Delete":
-                                    isStatic:=false
-                                    ; break ;do not break because `__Get`
-                                case "__Get", "__Call":
-                                    ; `__Get(a)` -> `__Set(a, Params)`
-                                    ; `__Call(a)` -> `__Call(a, Params)`
-                                    if (possiblyFunc.args.Length == 1) {
-                                        possiblyFunc.args.Push({type:"variable",value:"Params"})
+                    skipOne:=false
+                    for kk, possiblyFunc in v_.statements {
+                        if (skipOne) {
+                            skipOne:=false
+                            continue
+                        }
+                        switch possiblyFunc.type {
+                            case "function definition":
+                                functionScopes[functionScopes.Length]["this"].keys.push({propName:possiblyFunc.func.value,varInfo:{vartype:"simply defined",possiblyFunc:possiblyFunc}})
+                                switch (possiblyFunc.func.value), 0 {
+                                    case "__New", "__Delete":
+                                        isStatic:=false
+                                        ; break ;do not break because `__Get`
+                                    case "__Get", "__Call":
+                                        ; `__Get(a)` -> `__Set(a, Params)`
+                                        ; `__Call(a)` -> `__Call(a, Params)`
+                                        if (possiblyFunc.args.Length == 1) {
+                                            possiblyFunc.args.Push({type:"variable",value:"Params"})
+                                        }
+                                    case "__Set":
+                                        ; `__Set(a, b)` -> `__Set(a, Params, b)`
+                                        if (possiblyFunc.args.Length == 2) {
+                                            possiblyFunc.args.InsertAt(2, {type:"variable",value:"Params"})
+                                        }
+                                }
+                                v_:=possiblyFunc
+                                statements:=vBak.statements
+                                k_:=kk
+                                withNewline()
+                            case "comma multi-statement":
+                                do(statementsBak, kk)
+                                loop {
+                                    functionScopes[functionScopes.Length]["this"].keys.push({propName:possiblyFunc.right.left.value,varInfo:{vartype:"simply defined",possiblyFunc:possiblyFunc.right.right}})
+                                    if (!(possiblyFunc.left.type == "comma multi-statement")) {
+                                        break
                                     }
-                                case "__Set":
-                                    ; `__Set(a, b)` -> `__Set(a, Params, b)`
-                                    if (possiblyFunc.args.Length == 2) {
-                                        possiblyFunc.args.InsertAt(2, {type:"variable",value:"Params"})
-                                    }
-                            }
+                                    possiblyFunc:=possiblyFunc.left
+                                }
+                            case "binary":
+                                do(statementsBak, kk)
+                                functionScopes[functionScopes.Length]["this"].keys.push({propName:possiblyFunc.left.value,varInfo:{vartype:"simply defined",possiblyFunc:possiblyFunc.right}})
+                            case "var scope declaration":
+                                if (possiblyFunc.value=="static") {
+                                    skipOne:=true
+                                }
+                            case "class":
+                                v_:=possiblyFunc
+                                statements:=vBak.statements
+                                k_:=kk
+                                withNewline()
                         }
                     }
+                    k_:=kBak
+                    v_:=vBak
+                    statements:=statementsBak
                     if (isStatic) {
                         class_statements_len:=v_.statements.Length
                         class_statements_idx:=class_statements_len
@@ -2417,7 +2479,6 @@ walker_replacer() {
                             class_statements_idx--
                         }
                     }
-                    withNewline()
 
                     functionScopeNames.Pop()
                     currentScope:=functionScopes.Pop()
@@ -2801,6 +2862,38 @@ walker_replacer() {
                             obj[key]:=replacement
                         }
                         return do(obj, key)
+                    } else {
+
+                        o_:=t_
+                        arrPropName:=[]
+                        while (o_.parent.type == "property access") {
+                            o_:=o_.parent
+                            arrPropName.Push(o_.propName)
+                        }
+                        if (o_.parent.type=="variable") {
+                            for _scope in functionScopes {
+                                if (_scope.Has(o_.parent.value)) {
+                                    varInfo:=_scope[o_.parent.value]
+                                    ; implement later
+                                    if (varInfo.vartype == "class this") {
+                                        for key2 in varInfo.keys {
+                                            if (key2.propName=arrPropName[1]) {
+                                                varInfo:=key2.varInfo
+                                                if (varInfo.possiblyFunc.type == "object") {
+                                                    replacement:={type:"property access",parent:t_.parent,propName:"%" do(t_,"key") "%"}
+                                                    if (Type(obj) == "Object") {
+                                                        obj.%key%:=replacement
+                                                    } else {
+                                                        obj[key]:=replacement
+                                                    }
+                                                    return do(obj, key)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     ;the order of this may cause problem
                     return do(t_, "parent") "[" do(t_, "key") "]"
@@ -2956,7 +3049,7 @@ walker_replacer() {
                     }
                     ; a[b] ? a[b] : c -> a.Has(b) ? a[b] : c
                     if (t_.condition.type == "array access" && deepEqual(t_.condition,t_.ifTrue)) {
-                        t_.condition:={args:[t_.condition.key],func:{parent:t_.condition.parent,propName:"Has",type:"property access"},type:"function call"}
+                        t_.condition:={args:[t_.condition.key],func:{parent:t_.condition.parent,propName:"HasOwnProp",type:"property access"},type:"function call"}
                     }
                     doNotTouchCondition:=do(t_, "condition")
                     doNotTouchIfTrue:=do(t_, "ifTrue")
@@ -3181,8 +3274,8 @@ walker_replacer() {
                                         }
                                     }
                                 case "HasKey":
-                                    ; `.HasKey()` -> `.Has()`
-                                    t_.func.propName:="Has"
+                                    ; `.HasKey()` -> `.HasOwnProp()`
+                                    t_.func.propName:="HasOwnProp"
                                 case "SetCapacity":
                                     if (t_.args.Length > 1) {
                                         ; Object.SetCapacity(Key, ByteSize)
@@ -3327,17 +3420,18 @@ walker_replacer() {
                             argsStr.=", " do(t_.keys, i_) ":" do(t_.values, i_)
                             i_++
                         }
-                        return "{" argsStr "}"
-                    } else {
-                        ; {} -> Map()
-                        replacement:={args:[],func:{type:"variable",value:"Map"},type:"function call"}
-                        if (Type(obj) == "Object") {
-                            obj.%key%:=replacement
-                        } else {
-                            obj[key]:=replacement
-                        }
-                        return do(obj,key)
                     }
+                    return "{" argsStr "}"
+                    ; } else {
+                        ; {} -> Map()
+                    ;     replacement:={args:[],func:{type:"variable",value:"Map"},type:"function call"}
+                    ;     if (Type(obj) == "Object") {
+                    ;         obj.%key%:=replacement
+                    ;     } else {
+                    ;         obj[key]:=replacement
+                    ;     }
+                    ;     return do(obj,key)
+                    ; }
                 case "array":
                     argsStr:=""
                     if (t_.elements.Length) {
@@ -3707,7 +3801,7 @@ walker_undefinedVars() {
                 takesIndices(_currentIndices, blockObj.statements)
             }
 
-            if (notCurrentArr.Length > 1 && notCurrentArr[i_-1].type=="hotkey") {
+            if (i_ > 1 && notCurrentArr[i_-1].type=="hotkey") {
                 if (undefinedVarsMap.Count) {
                     for k_ in undefinedVarsMap {
                         right:={type:"variable", value:k_}
@@ -4308,8 +4402,8 @@ bbb:=aaa(FileRead("LiveThumb.ahk"))
 
 
 ; d currentArr
-MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
-; MsgBox A_Clipboard:=JSON_stringify(bbb.currentArr)
+; MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
+MsgBox A_Clipboard:=JSON_stringify(bbb.currentArr)
 A_Clipboard:=bbb.converted
 
 
