@@ -1400,11 +1400,16 @@ AHK_parse(str) {
                     ; array access or map access (same syntactically..)
                     c_++
                     skip_comments()
-                    left:={type: "array access", parent: left, key: value_expression()}
-                    while ((char_:=SubStr(str, c_, 1))==",") {
-                        c_++
-                        skip_comments()
+                    char_:=SubStr(str, c_, 1)
+                    if (char_=="]") {
+                        left:={type: "empty array access", parent: left}
+                    } else {
                         left:={type: "array access", parent: left, key: value_expression()}
+                        while ((char_:=SubStr(str, c_, 1))==",") {
+                            c_++
+                            skip_comments()
+                            left:={type: "array access", parent: left, key: value_expression()}
+                        }
                     }
                     c_++
                 case ".":
@@ -2341,9 +2346,11 @@ walker_replacer() {
                             } else {
                                 statements[k_]:={left:tempVar,op:":=",right:retValBak,type:"binary"}
                                 statements.InsertAt(k_ + 1, v_, t_.left)
+                                statements_len+=2
                                 break
                             }
                             statements[k_]:={type:"block", statements: [{left:tempVar,op:":=",right:retValBak,type:"binary"}, v_, t_.left]}
+                            do_statements(statements[k_].statements)
                         }
                     }
                     if (doDo) {
@@ -2778,7 +2785,7 @@ walker_replacer() {
                 case "array access":
                     doReplace:=false
                     if (Type(obj) == "Object") {
-                        if (obj.type == "condition with block") {
+                        if (obj.type == "condition with block" || obj.type=="group" || (obj.type == "binary" && (obj.op == "&&" || obj.op == "||"))) {
                             doReplace:=true
                         }
                     } else {
@@ -2787,7 +2794,7 @@ walker_replacer() {
                         }
                     }
                     if (doReplace) {
-                        replacement:={args:[t_.key],func:{parent:t_.parent,propName:"Has",type:"property access"},type:"function call"}
+                        replacement:={args:[t_.key],func:{parent:t_.parent,propName:"HasOwnProp",type:"property access"},type:"function call"}
                         if (Type(obj) == "Object") {
                             obj.%key%:=replacement
                         } else {
@@ -3313,15 +3320,16 @@ walker_replacer() {
                             e_.type:="obj key"
                         }
                     }
-                    outer1:
-                    loop 1 {
-                        for e_ in t_.values {
-                            if (!(e_.type=="hex number" || e_.type=="number")) {
-                                break outer1
-                            }
+                    if (t_.keys.Length) {
+                        argsStr.=do(t_.keys, 1) ":" do(t_.values, 1)
+                        i_:=2, len:=t_.keys.Length + 1
+                        while (i_<len) {
+                            argsStr.=", " do(t_.keys, i_) ":" do(t_.values, i_)
+                            i_++
                         }
+                        return "{" argsStr "}"
+                    } else {
                         ; {} -> Map()
-                        ; {a:number...,b:hex number...} -> Map(...)
                         replacement:={args:[],func:{type:"variable",value:"Map"},type:"function call"}
                         if (Type(obj) == "Object") {
                             obj.%key%:=replacement
@@ -3330,13 +3338,6 @@ walker_replacer() {
                         }
                         return do(obj,key)
                     }
-                    argsStr.=do(t_.keys, 1) ":" do(t_.values, 1)
-                    i_:=2, len:=t_.keys.Length + 1
-                    while (i_<len) {
-                        argsStr.=", " do(t_.keys, i_) ":" do(t_.values, i_)
-                        i_++
-                    }
-                    return "{" argsStr "}"
                 case "array":
                     argsStr:=""
                     if (t_.elements.Length) {
@@ -4300,9 +4301,9 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("Biga.ahk"))
 ; bbb:=aaa(FileRead("tooManyArgs.ahk"))
 ; bbb:=aaa(FileRead("while i goes to 1.ahk"))
-; bbb:=aaa(FileRead("LiveThumb.ahk"))
+bbb:=aaa(FileRead("LiveThumb.ahk"))
 ; bbb:=aaa(FileRead("class get set.ahk"))
-bbb:=aaa(FileRead("if array access.ahk"))
+; bbb:=aaa(FileRead("if array access.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
