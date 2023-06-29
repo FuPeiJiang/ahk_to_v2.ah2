@@ -37,14 +37,54 @@ AHK_parse(str) {
 
     skip_comments()
 
+    arrTypesArr:=[]
+    arrTypes:=["",""]
+    arrObj:=["",""]
+    doNotInclude:=0
+
+    whereAmI() {
+        loop {
+            switch arrTypes[arrTypes.Length - doNotInclude] {
+                case "classStatement", "whileStatement", "forStatement", "loopStatement":
+                    tempStatement:=currentArr.Pop()
+                    arrObj[arrObj.Length].body:=tempStatement
+                    arrTypes.Pop()
+                    arrObj.Pop()
+                case "ifStatement":
+                    tempStatement:=currentArr.Pop()
+                    arrObj[arrObj.Length - doNotInclude].ifTrue:=tempStatement
+                    arrTypes[arrTypes.Length - doNotInclude]:="maybeElse"
+                    break
+                case "maybeElse":
+                    ; arrTypes.Pop()
+                    ; arrObj.Pop()
+                    arrTypes.RemoveAt(arrTypes.Length - doNotInclude)
+                    arrObj.RemoveAt(arrObj.Length - doNotInclude)
+                case "elseStatement":
+                    toElseObj:=arrObj.RemoveAt(arrObj.Length - doNotInclude)
+                    tempStatement:=currentArr.Pop()
+                    toElseObj.ifFalse:=tempStatement
+                    arrTypes.RemoveAt(arrTypes.Length - doNotInclude)
+                case "skipOne":
+                    arrTypes.Pop()
+                    break
+                case "":
+                    break
+            }
+        }
+        doNotInclude:=0
+    }
+
     statements_loop:
     loop {
+
+        whereAmI()
 
         c1:=c_
         char1:=SubStr(str, c_ , 1)
         switch char1 {
             case "":
-                return
+                break statements_loop
             case "{":
                 c_++
                 if (currentArr.Length) {
@@ -52,12 +92,18 @@ AHK_parse(str) {
                         case "function call":
                             currentArr[currentArr.Length].type:="function definition"
                             currentArr[currentArr.Length].body:={type:"block", statements:statements:=[]}
+                            arrTypesArr.Push(arrTypes,arrObj)
+                            arrTypes:=["",""]
+                            arrObj:=["",""]
                             arrArr.Push(currentArr)
                             currentArr:=statements
                             skip_comments()
                             continue statements_loop
                         }
                 }
+                arrTypesArr.Push(arrTypes,arrObj)
+                arrTypes:=["",""]
+                arrObj:=["",""]
                 arrArr.Push(currentArr)
                 currentArr.Push({type:"block", statements:statements:=[]})
                 currentArr:=statements
@@ -66,6 +112,9 @@ AHK_parse(str) {
                 ; block
             case "}":
                 c_++
+                whereAmI()
+                arrObj:=arrTypesArr.Pop()
+                arrTypes:=arrTypesArr.Pop()
                 currentArr:=arrArr.Pop()
                 if (arrArr.Length) {
                     lastArr:=arrArr[arrArr.Length]
@@ -129,26 +178,15 @@ AHK_parse(str) {
                         }
 
                     }
-                    char_:=SubStr(str, c_, 1)
-                    if (char_=="{") {
-                        currentArr.Push({type:"if with block"})
-                        currentArr.Push({type: "condition with block",expr:toPush})
-                    } else {
-                        currentArr.Push({type:"if without block"})
-                        currentArr.Push(toPush)
-                    }
+                    doNotInclude:=1
+                    currentArr.Push({type:"if statement",condition:toPush,ifTrue:""})
+                    arrTypes.Push("ifStatement")
+                    arrObj.Push(currentArr[currentArr.Length])
                 }
                 elseStatemement() {
-                    if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "if with block") {
-                        currentArr[currentArr.Length].type:="block before else"
-                    }
+                    arrTypes[arrTypes.Length]:="elseStatement"
+                    arrTypes.Push("skipOne")
                     skip_comments()
-                    char_:=SubStr(str, c_, 1)
-                    if (char_=="{") {
-                        currentArr.Push({type:"else with block"})
-                    } else {
-                        currentArr.Push({type:"else without block"})
-                    }
                 }
                 _catchStatemement() {
                     if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 1].type == "try with block") {
@@ -163,20 +201,14 @@ AHK_parse(str) {
                     }
                 }
                 whileStatemement() {
-                    ; while statement
-                    skip_comments()
                     toPush:=value_expression()
                     if (toPush.type == "variable") {
                         toPush:={type: "group", value: toPush}
                     }
-                    char_:=SubStr(str, c_, 1)
-                    if (char_=="{") {
-                        currentArr.Push({type:"while with block"})
-                        currentArr.Push({type: "condition with block",expr:toPush})
-                    } else {
-                        currentArr.Push({type:"while without block"})
-                        currentArr.Push(toPush)
-                    }
+                    doNotInclude:=1
+                    currentArr.Push({type:"while statement",condition:toPush})
+                    arrTypes.Push("whileStatement")
+                    arrObj.Push(currentArr[currentArr.Length])
                 }
                 commandStatement() {
                     if (InStr(",:=,+=,-=,*=,/=,//=,.=,|=,&=,^=,>>=,<<=,", "," OutputVar_operator.0 ",", true)) {
@@ -206,7 +238,7 @@ AHK_parse(str) {
                 switch char_ {
                     case "":
                         add_empty_command()
-                        return
+                        break statements_loop
                     case ",":
                         if (char1=="#") {
                             ; directive
@@ -282,11 +314,10 @@ AHK_parse(str) {
                             c_+=OutputVar_className.Len
                             skip_comments()
                             char_:=SubStr(str, c_, 1)
-                            if (char_=="{") {
-                                currentArr.Push({type: "class",className:OutputVar_className.0})
-                            } else {
-                                MsgBox "class without {"
-                            }
+                            doNotInclude:=1
+                            currentArr.Push({type: "class statement",className:OutputVar_className.0})
+                            arrTypes.Push("classStatement")
+                            arrObj.Push(currentArr[currentArr.Length])
                         } else {
                             skip_comments()
                             if (RegExMatch(str, "(*COMMIT)[&*+\-.\/:<=>^|]+", &OutputVar_operator, c_)) {
@@ -321,6 +352,7 @@ AHK_parse(str) {
                             case "if":
                                 ifStatemement()
                             case "while":
+                                skip_comments()
                                 whileStatemement()
                             default:
                                 c_:=c1
@@ -370,7 +402,7 @@ AHK_parse(str) {
                 }
         }
     }
-
+    whereAmI()
     return
 
     skip_s() {
@@ -488,6 +520,7 @@ AHK_parse(str) {
                         OutputVar_comments_bak:="" ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                         if (out_v1str~="^(?![.+]$)\+?\d*(?:\.\d*)?$") { ;regex: number
                             toPush:={type: "number", value: out_v1str}
+                            OutputVar_comments_bak:=OutputVar_comments ;SUPER WEIRD BUG WHERE OutputVar_comments.0 gets set to ""
                         } else if (argsArr.Length==1 || argsArr.Length==2) {
                             toPush:=v1str_to_expression(out_v1str)
                             cLoL:=cBak
@@ -564,11 +597,7 @@ AHK_parse(str) {
                     ; boolArr:=[0,0,3]
                     boolArr:=[2,0,3]
                 case "else":
-                    if (currentArr[currentArr.Length].type == "block" && currentArr[currentArr.Length - 2].type == "if with block") {
-                        currentArr[currentArr.Length].type:="block before else"
-                    }
-                    currentArr.Push({type:"else with block"})
-                    skip_comments()
+                    elseStatemement()
                     return
                 case "MouseClick":
                     boolArr:=[2,0,0,0,0,2,3]
@@ -609,18 +638,7 @@ AHK_parse(str) {
                     }
                     return
                 case "while":
-                    toPush:=value_expression()
-                    if (toPush.type == "variable") {
-                        toPush:={type: "group", value: toPush}
-                    }
-                    char_:=SubStr(str, c_, 1)
-                    if (char_=="{") {
-                        currentArr.Push({type:"while with block"})
-                        currentArr.Push({type: "condition with block",expr:toPush})
-                    } else {
-                        currentArr.Push({type:"while without block"})
-                        currentArr.Push(toPush)
-                    }
+                    whileStatemement()
                     return
                 case "loop":
                     char_:=SubStr(str, c_, 1)
@@ -647,7 +665,10 @@ AHK_parse(str) {
                             if (currentArr.Length && currentArr[currentArr.Length].type == "label") {
                                 labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
                             }
-                            currentArr.Push({type:"loop with block1"})
+                            doNotInclude:=1
+                            currentArr.Push({type:"loop statement",argsArr:[]})
+                            arrTypes.Push("loopStatement")
+                            arrObj.Push(currentArr[currentArr.Length])
                             return
                         ; no condition
                         default:
@@ -679,14 +700,13 @@ AHK_parse(str) {
                     if (currentArr.Length && currentArr[currentArr.Length].type == "label") {
                         labelBlockStart:=0x7FFFFFFFFFFFFFFF ;largest int64
                     }
-                    char_:=SubStr(str, c_, 1)
-                    if (char_=="{") {
-                        currentArr.Push({type:"loop with block2",loopExtend:loopExtend})
-                        currentArr.Push({type: "argsArr with block",argsArr:argsArr})
-                    } else {
-                        currentArr.Push({type:"loop without block",loopExtend:loopExtend})
-                        currentArr.Push({type: "argsArr without block", argsArr:argsArr})
+                    currentArr.Push({type:"loop statement",argsArr:argsArr})
+                    if (loopExtend) {
+                        currentArr[currentArr.Length].loopExtend:=loopExtend
                     }
+                    doNotInclude:=1
+                    arrTypes.Push("loopStatement")
+                    arrObj.Push(currentArr[currentArr.Length])
                     return
                 case "WinActivate", "WinHide"
                 ,"Gui":
@@ -707,25 +727,17 @@ AHK_parse(str) {
                             c_++
                             skip_comments()
                             var2:=value_expression()
-                            char2:=SubStr(str, c_, 1)
-                            if (char2=="{") {
-                                expression:=var2.right.right
-                                currentArr.Push({type:"for with block", var1:var1, var2:var2.left, expression:expression})
-                                return
-                            } else {
-                                expression:=var2.right.right
-                                currentArr.Push({type:"for without block", var1:var1, var2:var2.left, expression:expression})
-                                return
-                            }
-                        case "{":
-                            expression:=var1.right.right
-                            currentArr.Push({type:"for with block", var1:var1.left, var2:false, expression:expression})
-                            return
+                            expression:=var2.right.right
+                            currentArr.Push({type:"for statement", var1:var1, var2:var2.left, expression:expression})
+                        ; case "{":
                         default:
                             expression:=var1.right.right
-                            currentArr.Push({type:"for without block", var1:var1.left, var2:false, expression:expression})
-                            return
+                            currentArr.Push({type:"for statement", var1:var1.left, expression:expression})
                     }
+                    doNotInclude:=1
+                    arrTypes.Push("forStatement")
+                    arrObj.Push(currentArr[currentArr.Length])
+                    return
                 case "switch":
                     SwitchValue:=value_expression()
                     if (SwitchValue.type !== "group") {
@@ -778,6 +790,9 @@ AHK_parse(str) {
                     boolArr:=[0,0]
                 case "FileAppend":
                     boolArr:=[2,2,3]
+                case "get","set":
+                    currentArr.Push({type:"property syntax get/set",value:StrLower(OutputVar_varName.0)})
+                    return
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -1407,7 +1422,7 @@ AHK_parse(str) {
                     skip_comments()
                     char_:=SubStr(str, c_, 1)
                     if (char_=="]") {
-                        left:={type: "empty array access", parent: left}
+                        left:={type: "empty property syntax", value: left.value}
                     } else {
                         left:={type: "array access", parent: left, key: value_expression()}
                         while ((char_:=SubStr(str, c_, 1))==",") {
@@ -1888,7 +1903,7 @@ walker_superGlobalVars() {
                     if (v_.value=="static") {
                         kStatic:=k_+1
                     }
-                case "class":
+                case "class statement":
                     keys:=[]
                     if (classKeysArr.Length) {
                         classKeysArr[classKeysArr.Length].Push({propName:v_.className,varInfo:{vartype:"class this",keys:keys}})
@@ -1896,8 +1911,7 @@ walker_superGlobalVars() {
                         superGlobalVarsMap[v_.className]:={vartype:"class this",keys:keys}
                     }
                     classKeysArr.Push(keys)
-                    v_:=statements[++k_]
-                    do_statements(v_.statements)
+                    do_statements(v_.body.statements)
                     classKeysArr.Pop()
             }
         }
@@ -1953,67 +1967,90 @@ walker_globalVars() {
                     if (indent=="") {
                         globalFunctionIndices.Push(k_)
                     }
-                case "class":
-                    globalFunctionIndices.Push(k_ + 1)
+                case "class statement":
+                    globalFunctionIndices.Push(k_)
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
-                case "argsArr with block":
-                    finalStr.=getArgsArrStr(v_.argsArr) " "
-                case "argsArr without block":
-                    finalStr.=getArgsArrStr(v_.argsArr) "`n"
-                case "if with block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "if without block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else with block")) {
-                        finalStr.=indent
-                        v_:=statements[++k_]
-                        withNewline()
+                case "loop statement":
+                    vBak:=v_
+                    if (v_.HasOwnProp("loopExtend")) {
+                        finalStr.="Loop " v_.loopExtend " "
+                    } else {
+                        finalStr.="loop "
                     }
-                case "while with block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "while without block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "else with block":
-                    finalStr.="else "
-                    v_:=statements[++k_]
-                    withNewline()
+                    finalStr.=getArgsArrStr(v_.argsArr)
+                    if (vBak.body.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.body
+                        withNewline()
+                        finalStr.="`n"
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.body
+                        withNewline()
+                        indent:=SubStr(indent, 3)
+                    }
+                case "if statement":
+                    vBak:=v_
+                    insertElse() {
+                        finalStr.="else"
+                        if (vBak.ifFalse.type == "if statement" || vBak.ifFalse.type == "block") {
+                            finalStr.=" "
+                            v_:=vBak.ifFalse
+                            withNewline()
+                            if (vBak.ifFalse.type == "block") {
+                                finalStr.="`n"
+                            }
+                        } else {
+                            indent.="  "
+                            finalStr.="`n" indent
+                            v_:=vBak.ifFalse
+                            withNewline()
+                            indent:=SubStr(indent, 3)
+                        }
+                    }
+                    finalStr.="if " do(vBak.condition)
+                    if (vBak.ifTrue.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.ifTrue
+                        withNewline()
+                        if (vBak.HasOwnProp("ifFalse")) {
+                            finalStr.=" "
+                            insertElse()
+                        } else {
+                            finalStr.="`n"
+                        }
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.ifTrue
+                        withNewline()
+                        indent:=SubStr(indent, 3)
+                        if (vBak.HasOwnProp("ifFalse")) {
+                            finalStr.=indent
+                            insertElse()
+                        }
+                    }
+                case "while statement":
+                    vBak:=v_
+                    finalStr.="while " do(vBak.condition)
+                    if (vBak.body.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.body
+                        withNewline()
+                        finalStr.="`n"
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.body
+                        withNewline()
+                        indent:=SubStr(indent, 3)
+                    }
                 case "catch with block":
                     finalStr.="catch "
                     v_:=statements[++k_]
                     withNewline()
-                case "else without block":
-                    finalStr.="else"
-                    finalStr.="`n"
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
                 case "try without block":
                     finalStr.="try"
                     finalStr.="`n"
@@ -2398,7 +2435,7 @@ walker_replacer() {
                     indent:=SubStr(indent, 3)
                     finalStr.=indent
                     finalStr.="} "
-                case "class":
+                case "class statement":
                     finalStr.="class " v_.className " "
                     currentScope:=Map()
                     currentScope.CaseSense:="Off"
@@ -2406,15 +2443,13 @@ walker_replacer() {
                     functionScopes.Push(currentScope)
                     functionScopeNames.Push(v_.className)
 
-                    v_:=statements[++k_]
-
                     kBak:=k_
                     vBak:=v_
                     statementsBak:=statements
 
                     isStatic:=true
                     skipOne:=false
-                    for kk, possiblyFunc in v_.statements {
+                    for kk, possiblyFunc in vBak.body.statements {
                         if (skipOne) {
                             skipOne:=false
                             continue
@@ -2439,9 +2474,17 @@ walker_replacer() {
                                         }
                                 }
                                 v_:=possiblyFunc
-                                statements:=vBak.statements
+                                statements:=vBak.body.statements
                                 k_:=kk
                                 withNewline()
+                                switch (possiblyFunc.func.value), 0 {
+                                    case "__Get":
+                                        ; return this.GetOwnPropDesc(aName).value
+                                        ; possiblyFunc.body.statements
+                                        ; possiblyFunc.args.Push({type:"variable",value:"Params"})
+                                    case "__Set":
+                                        ; this.DefineProp(aName, { value: aVal })
+                                }
                             case "comma multi-statement":
                                 do(statementsBak, kk)
                                 loop {
@@ -2458,9 +2501,9 @@ walker_replacer() {
                                 if (possiblyFunc.value=="static") {
                                     skipOne:=true
                                 }
-                            case "class":
+                            case "class statement":
                                 v_:=possiblyFunc
-                                statements:=vBak.statements
+                                statements:=vBak.body.statements
                                 k_:=kk
                                 withNewline()
                         }
@@ -2469,12 +2512,12 @@ walker_replacer() {
                     v_:=vBak
                     statements:=statementsBak
                     if (isStatic) {
-                        class_statements_len:=v_.statements.Length
+                        class_statements_len:=v_.body.statements.Length
                         class_statements_idx:=class_statements_len
                         while (class_statements_idx > 0) {
-                            possiblyFunc:=v_.statements[class_statements_idx]
+                            possiblyFunc:=v_.body.statements[class_statements_idx]
                             if (possiblyFunc.type == "function definition") {
-                                v_.statements.InsertAt(class_statements_idx, {type:"var scope declaration", value: "static"})
+                                v_.body.statements.InsertAt(class_statements_idx, {type:"var scope declaration", value: "static"})
                             }
                             class_statements_idx--
                         }
@@ -2513,63 +2556,86 @@ walker_replacer() {
                     currentScope:=functionScopes.Pop()
                 case "condition with block":
                     finalStr.=do(v_, "expr") " "
-                case "argsArr with block":
-                    finalStr.=getArgsArrStr(v_.argsArr) " "
-                case "argsArr without block":
-                    finalStr.=getArgsArrStr(v_.argsArr) "`n"
-                case "if with block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "if without block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else with block")) {
-                        finalStr.=indent
-                        v_:=statements[++k_]
-                        withNewline()
+                case "loop statement":
+                    vBak:=v_
+                    if (v_.HasOwnProp("loopExtend")) {
+                        finalStr.="Loop " v_.loopExtend " "
+                    } else {
+                        finalStr.="loop "
                     }
-                case "while with block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "while without block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "else with block":
-                    finalStr.="else "
-                    v_:=statements[++k_]
-                    withNewline()
+                    finalStr.=getArgsArrStr(v_.argsArr)
+                    if (vBak.body.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.body
+                        withNewline()
+                        finalStr.="`n"
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.body
+                        withNewline()
+                        indent:=SubStr(indent, 3)
+                    }
+                case "if statement":
+                    vBak:=v_
+                    insertElse() {
+                        finalStr.="else"
+                        if (vBak.ifFalse.type == "if statement" || vBak.ifFalse.type == "block") {
+                            finalStr.=" "
+                            v_:=vBak.ifFalse
+                            withNewline()
+                            if (vBak.ifFalse.type == "block") {
+                                finalStr.="`n"
+                            }
+                        } else {
+                            indent.="  "
+                            finalStr.="`n" indent
+                            v_:=vBak.ifFalse
+                            withNewline()
+                            indent:=SubStr(indent, 3)
+                        }
+                    }
+                    finalStr.="if " do(vBak,"condition")
+                    if (vBak.ifTrue.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.ifTrue
+                        withNewline()
+                        if (vBak.HasOwnProp("ifFalse")) {
+                            finalStr.=" "
+                            insertElse()
+                        } else {
+                            finalStr.="`n"
+                        }
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.ifTrue
+                        withNewline()
+                        indent:=SubStr(indent, 3)
+                        if (vBak.HasOwnProp("ifFalse")) {
+                            finalStr.=indent
+                            insertElse()
+                        }
+                    }
+                case "while statement":
+                    vBak:=v_
+                    finalStr.="while " do(vBak,"condition")
+                    if (vBak.body.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.body
+                        withNewline()
+                        finalStr.="`n"
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.body
+                        withNewline()
+                        indent:=SubStr(indent, 3)
+                    }
                 case "catch with block":
                     finalStr.="catch "
                     v_:=statements[++k_]
                     withNewline()
-                case "else without block":
-                    finalStr.="else"
-                    finalStr.="`n"
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
                 case "try without block":
                     finalStr.="try"
                     finalStr.="`n"
@@ -2578,33 +2644,28 @@ walker_replacer() {
                     v_:=statements[++k_]
                     withNewline()
                     indent:=SubStr(indent, 3)
-                case "for with block":
-                    currentScope[v_.var1.value]:={vartype:"simply defined"}
-                    finalStr.="for " do(v_, "var1")
-                    if (v_.var2) {
-                        currentScope[v_.var2.value]:={vartype:"simply defined"}
-                        finalStr.=", " do(v_, "var2")
+                case "for statement":
+                    vBak:=v_
+                    currentScope[vBak.var1.value]:={vartype:"simply defined"}
+                    finalStr.="for " do(vBak,"var1")
+                    if (vBak.HasOwnProp("var2")) {
+                        currentScope[vBak.var2.value]:={vartype:"simply defined"}
+                        finalStr.=", " do(vBak,"var2")
                     }
-                    finalStr.=" in " do(v_, "expression")
+                    finalStr.=" in " do(vBak,"expression")
 
-                    finalStr.=" " ;for the block
-                    v_:=statements[++k_]
-                    withNewline()
-                case "for without block":
-                    currentScope[v_.var1.value]:={vartype:"simply defined"}
-                    finalStr.="for " do(v_, "var1")
-                    if (v_.var2) {
-                        currentScope[v_.var2.value]:={vartype:"simply defined"}
-                        finalStr.=", " do(v_, "var2")
+                    if (vBak.body.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.body
+                        withNewline()
+                        finalStr.="`n"
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.body
+                        withNewline()
+                        indent:=SubStr(indent, 3)
                     }
-                    finalStr.=" in " do(v_, "expression")
-
-                    finalStr.="`n"
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
                 case "label":
                     finalStr.=v_.labelName ":`n"
             }
@@ -3465,15 +3526,11 @@ walker_undefinedVars() {
             currentScope.CaseSense:="Off"
             functionScopes.Push(currentScope)
 
-            if (notCurrentArr[i_].type=="block") {
-                blockObj:=notCurrentArr[i_]
-                if (notCurrentArr.Length > 1 && notCurrentArr[i_ - 1].type=="class") {
-                    currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
-                    currentScope[notCurrentArr[i_ - 1].className]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
-                }
-            } else {
-                blockObj:=notCurrentArr[i_].body
+            if (notCurrentArr[i_].type=="class statement") {
+                currentScope["this"]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
+                currentScope[notCurrentArr[i_].className]:={vartype:"simply defined"} ;`this` isn't global, but should be defined in `class`
             }
+            blockObj:=notCurrentArr[i_].body
 
             if (notCurrentArr[i_].type=="function definition") {
                 ;parameters are also declared variables
@@ -3572,63 +3629,86 @@ walker_undefinedVars() {
                             ; withNewline()
                         case "condition with block":
                             finalStr.=do(v_, "expr") " "
-                        case "argsArr with block":
-                            finalStr.=getArgsArrStr(v_.argsArr) " "
-                        case "argsArr without block":
-                            finalStr.=getArgsArrStr(v_.argsArr) "`n"
-                        case "if with block":
-                            finalStr.="if "
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-                        case "if without block":
-                            finalStr.="if "
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-
-                            indent.="  "
-                            finalStr.=indent
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-                            indent:=SubStr(indent, 3)
-                            if (k_do_statements + 1 < statements_len && (statements[k_do_statements+1].type == "else without block" || statements[k_do_statements+1].type == "else with block")) {
-                                finalStr.=indent
-                                v_:=statements[++k_do_statements]
-                                withNewline()
+                        case "loop statement":
+                            vBak:=v_
+                            if (v_.HasOwnProp("loopExtend")) {
+                                finalStr.="Loop " v_.loopExtend " "
+                            } else {
+                                finalStr.="loop "
                             }
-                        case "while with block":
-                            finalStr.="while "
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-                        case "while without block":
-                            finalStr.="while "
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-
-                            indent.="  "
-                            finalStr.=indent
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-                            indent:=SubStr(indent, 3)
-                        case "else with block":
-                            finalStr.="else "
-                            v_:=statements[++k_do_statements]
-                            withNewline()
+                            finalStr.=getArgsArrStr(v_.argsArr)
+                            if (vBak.body.type == "block") {
+                                finalStr.=" "
+                                v_:=vBak.body
+                                withNewline()
+                                finalStr.="`n"
+                            } else {
+                                indent.="  "
+                                finalStr.="`n" indent
+                                v_:=vBak.body
+                                withNewline()
+                                indent:=SubStr(indent, 3)
+                            }
+                        case "if statement":
+                            vBak:=v_
+                            insertElse() {
+                                finalStr.="else"
+                                if (vBak.ifFalse.type == "if statement" || vBak.ifFalse.type == "block") {
+                                    finalStr.=" "
+                                    v_:=vBak.ifFalse
+                                    withNewline()
+                                    if (vBak.ifFalse.type == "block") {
+                                        finalStr.="`n"
+                                    }
+                                } else {
+                                    indent.="  "
+                                    finalStr.="`n" indent
+                                    v_:=vBak.ifFalse
+                                    withNewline()
+                                    indent:=SubStr(indent, 3)
+                                }
+                            }
+                            finalStr.="if " do(vBak,"condition")
+                            if (vBak.ifTrue.type == "block") {
+                                finalStr.=" "
+                                v_:=vBak.ifTrue
+                                withNewline()
+                                if (vBak.HasOwnProp("ifFalse")) {
+                                    finalStr.=" "
+                                    insertElse()
+                                } else {
+                                    finalStr.="`n"
+                                }
+                            } else {
+                                indent.="  "
+                                finalStr.="`n" indent
+                                v_:=vBak.ifTrue
+                                withNewline()
+                                indent:=SubStr(indent, 3)
+                                if (vBak.HasOwnProp("ifFalse")) {
+                                    finalStr.=indent
+                                    insertElse()
+                                }
+                            }
+                        case "while statement":
+                            vBak:=v_
+                            finalStr.="while " do(vBak,"condition")
+                            if (vBak.body.type == "block") {
+                                finalStr.=" "
+                                v_:=vBak.body
+                                withNewline()
+                                finalStr.="`n"
+                            } else {
+                                indent.="  "
+                                finalStr.="`n" indent
+                                v_:=vBak.body
+                                withNewline()
+                                indent:=SubStr(indent, 3)
+                            }
                         case "catch with block":
                             finalStr.="catch "
                             v_:=statements[++k_do_statements]
                             withNewline()
-                        case "else without block":
-                            finalStr.="else"
-                            finalStr.="`n"
-                            indent.="  "
-                            finalStr.=indent
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-                            indent:=SubStr(indent, 3)
                         case "try without block":
                             finalStr.="try"
                             finalStr.="`n"
@@ -3637,33 +3717,28 @@ walker_undefinedVars() {
                             v_:=statements[++k_do_statements]
                             withNewline()
                             indent:=SubStr(indent, 3)
-                        case "for with block":
-                            currentScope[v_.var1.value]:={vartype:"simply defined"}
-                            finalStr.="for " do(v_, "var1")
-                            if (v_.var2) {
-                                currentScope[v_.var2.value]:={vartype:"simply defined"}
-                                finalStr.=", " do(v_, "var2")
+                        case "for statement":
+                            vBak:=v_
+                            currentScope[vBak.var1.value]:={vartype:"simply defined"}
+                            finalStr.="for " do(vBak,"var1")
+                            if (vBak.HasOwnProp("var2")) {
+                                currentScope[vBak.var2.value]:={vartype:"simply defined"}
+                                finalStr.=", " do(vBak,"var2")
                             }
-                            finalStr.=" in " do(v_, "expression")
+                            finalStr.=" in " do(vBak,"expression")
 
-                            finalStr.=" " ;for the block
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-                        case "for without block":
-                            currentScope[v_.var1.value]:={vartype:"simply defined"}
-                            finalStr.="for " do(v_, "var1")
-                            if (v_.var2) {
-                                currentScope[v_.var2.value]:={vartype:"simply defined"}
-                                finalStr.=", " do(v_, "var2")
+                            if (vBak.body.type == "block") {
+                                finalStr.=" "
+                                v_:=vBak.body
+                                withNewline()
+                                finalStr.="`n"
+                            } else {
+                                indent.="  "
+                                finalStr.="`n" indent
+                                v_:=vBak.body
+                                withNewline()
+                                indent:=SubStr(indent, 3)
                             }
-                            finalStr.=" in " do(v_, "expression")
-
-                            finalStr.="`n"
-                            indent.="  "
-                            finalStr.=indent
-                            v_:=statements[++k_do_statements]
-                            withNewline()
-                            indent:=SubStr(indent, 3)
                         case "label":
                             finalStr.=v_.labelName ":`n"
                     }
@@ -3911,99 +3986,95 @@ what() {
                     do_statements(v_.statements)
                     indent:=SubStr(indent, 3)
                     finalStr.=indent
-                    finalStr.="}`n"
-                case "block before else","block before catch":
-                    finalStr.="{`n"
-                    indent.="  "
-                    do_statements(v_.statements)
-                    indent:=SubStr(indent, 3)
-                    finalStr.=indent
-                    finalStr.="} "
-                    v_:=statements[++k_]
-                    withNewline()
-                case "class":
+                    finalStr.="}"
+                case "class statement":
                     finalStr.="class " v_.className " "
-                    v_:=statements[++k_]
+                    v_:=v_.body
                     withNewline()
+                    finalStr.="`n"
                 case "function definition":
                     finalStr.=do(v_) " "
                     v_:=v_.body
                     withNewline()
+                    finalStr.="`n"
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
-                case "argsArr with block":
-                    finalStr.=getArgsArrStr(v_.argsArr) " "
-                case "argsArr without block":
-                    finalStr.=getArgsArrStr(v_.argsArr) "`n"
-                case "loop with block1":
-                    finalStr.="loop "
-                    v_:=statements[++k_]
-                    withNewline()
-                case "loop with block2":
-                    if (v_.loopExtend) {
+                case "loop statement":
+                    vBak:=v_
+                    if (v_.HasOwnProp("loopExtend")) {
                         finalStr.="Loop " v_.loopExtend " "
                     } else {
                         finalStr.="loop "
                     }
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "loop without block":
-                    if (v_.loopExtend) {
-                        finalStr.="Loop " v_.loopExtend " "
-                    } else {
-                        finalStr.="loop "
-                    }
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "if with block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "if without block":
-                    finalStr.="if "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                    if (k_ + 1 < statements_len && (statements[k_+1].type == "else without block" || statements[k_+1].type == "else with block")) {
-                        finalStr.=indent
-                        v_:=statements[++k_]
+                    finalStr.=getArgsArrStr(v_.argsArr)
+                    if (vBak.body.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.body
                         withNewline()
+                        finalStr.="`n"
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.body
+                        withNewline()
+                        indent:=SubStr(indent, 3)
                     }
-                case "while with block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-                    v_:=statements[++k_]
-                    withNewline()
-                case "while without block":
-                    finalStr.="while "
-                    v_:=statements[++k_]
-                    withNewline()
-
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
-                case "else with block":
-                    finalStr.="else "
-                    v_:=statements[++k_]
-                    withNewline()
+                case "if statement":
+                    vBak:=v_
+                    insertElse() {
+                        finalStr.="else"
+                        if (vBak.ifFalse.type == "if statement" || vBak.ifFalse.type == "block") {
+                            finalStr.=" "
+                            v_:=vBak.ifFalse
+                            withNewline()
+                            if (vBak.ifFalse.type == "block") {
+                                finalStr.="`n"
+                            }
+                        } else {
+                            indent.="  "
+                            finalStr.="`n" indent
+                            v_:=vBak.ifFalse
+                            withNewline()
+                            indent:=SubStr(indent, 3)
+                        }
+                    }
+                    finalStr.="if " do(vBak.condition)
+                    if (vBak.ifTrue.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.ifTrue
+                        withNewline()
+                        if (vBak.HasOwnProp("ifFalse")) {
+                            finalStr.=" "
+                            insertElse()
+                        } else {
+                            finalStr.="`n"
+                        }
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.ifTrue
+                        withNewline()
+                        indent:=SubStr(indent, 3)
+                        if (vBak.HasOwnProp("ifFalse")) {
+                            finalStr.=indent
+                            insertElse()
+                        }
+                    }
+                case "while statement":
+                    vBak:=v_
+                    finalStr.="while " do(vBak.condition)
+                    if (vBak.body.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.body
+                        withNewline()
+                        finalStr.="`n"
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.body
+                        withNewline()
+                        indent:=SubStr(indent, 3)
+                    }
                 case "try with block":
                     finalStr.="try "
                     v_:=statements[++k_]
@@ -4012,14 +4083,6 @@ what() {
                     finalStr.="catch "
                     v_:=statements[++k_]
                     withNewline()
-                case "else without block":
-                    finalStr.="else"
-                    finalStr.="`n"
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
                 case "try without block":
                     finalStr.="try"
                     finalStr.="`n"
@@ -4028,29 +4091,26 @@ what() {
                     v_:=statements[++k_]
                     withNewline()
                     indent:=SubStr(indent, 3)
-                case "for with block":
-                    finalStr.="for " do(v_.var1)
-                    if (v_.var2) {
-                        finalStr.=", " do(v_.var2)
+                case "for statement":
+                    vBak:=v_
+                    finalStr.="for " do(vBak.var1)
+                    if (vBak.HasOwnProp("var2")) {
+                        finalStr.=", " do(vBak.var2)
                     }
-                    finalStr.=" in " do(v_.expression)
+                    finalStr.=" in " do(vBak.expression)
 
-                    finalStr.=" " ;for the block
-                    v_:=statements[++k_]
-                    withNewline()
-                case "for without block":
-                    finalStr.="for " do(v_.var1)
-                    if (v_.var2) {
-                        finalStr.=", " do(v_.var2)
+                    if (vBak.body.type == "block") {
+                        finalStr.=" "
+                        v_:=vBak.body
+                        withNewline()
+                        finalStr.="`n"
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        v_:=vBak.body
+                        withNewline()
+                        indent:=SubStr(indent, 3)
                     }
-                    finalStr.=" in " do(v_.expression)
-
-                    finalStr.="`n"
-                    indent.="  "
-                    finalStr.=indent
-                    v_:=statements[++k_]
-                    withNewline()
-                    indent:=SubStr(indent, 3)
                 case "label":
                     finalStr.=v_.labelName ":`n"
                 case "switch":
@@ -4395,9 +4455,10 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("Biga.ahk"))
 ; bbb:=aaa(FileRead("tooManyArgs.ahk"))
 ; bbb:=aaa(FileRead("while i goes to 1.ahk"))
-bbb:=aaa(FileRead("LiveThumb.ahk"))
+; bbb:=aaa(FileRead("LiveThumb.ahk"))
 ; bbb:=aaa(FileRead("class get set.ahk"))
 ; bbb:=aaa(FileRead("if array access.ahk"))
+bbb:=aaa(FileRead("if statement.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
