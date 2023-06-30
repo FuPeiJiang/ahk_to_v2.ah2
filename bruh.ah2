@@ -45,7 +45,7 @@ AHK_parse(str) {
     whereAmI() {
         loop {
             switch arrTypes[arrTypes.Length - doNotInclude] {
-                case "classStatement", "whileStatement", "forStatement", "loopStatement":
+                case "classStatement", "whileStatement", "forStatement", "loopStatement", "emptyPropertySyntax", "propertySyntaxGetSet":
                     tempStatement:=currentArr.Pop()
                     arrObj[arrObj.Length].body:=tempStatement
                     arrTypes.Pop()
@@ -78,10 +78,22 @@ AHK_parse(str) {
     statements_loop:
     loop {
 
-        whereAmI()
 
         c1:=c_
         char1:=SubStr(str, c_ , 1)
+
+        if (char1 == ",") {
+            ; a:=1,b:=2
+            ; or the cursed: Return "", ErrorLevel := 1
+            c_++
+            skip_comments()
+            toPush:=value_expression()
+            currentArr[currentArr.Length]:={type:"comma multi-statement", left:currentArr[currentArr.Length], right:toPush}
+            continue statements_loop
+        }
+
+        whereAmI()
+
         switch char1 {
             case "":
                 break statements_loop
@@ -136,13 +148,6 @@ AHK_parse(str) {
                 ; "(" group
                 skip_expression()
             ; case "#":
-            case ",":
-                ; a:=1,b:=2
-                ; or the cursed: Return "", ErrorLevel := 1
-                c_++
-                skip_comments()
-                toPush:=value_expression()
-                currentArr[currentArr.Length]:={type:"comma multi-statement", left:currentArr[currentArr.Length], right:toPush}
             default:
                 ; function call
                 ; function definition
@@ -791,7 +796,10 @@ AHK_parse(str) {
                 case "FileAppend":
                     boolArr:=[2,2,3]
                 case "get","set":
-                    currentArr.Push({type:"property syntax get/set",value:StrLower(OutputVar_varName.0)})
+                    currentArr.Push({type:"property syntax get/set",which:StrLower(OutputVar_varName.0)})
+                    doNotInclude:=1
+                    arrTypes.Push("propertySyntaxGetSet")
+                    arrObj.Push(currentArr[currentArr.Length])
                     return
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
@@ -1422,7 +1430,10 @@ AHK_parse(str) {
                     skip_comments()
                     char_:=SubStr(str, c_, 1)
                     if (char_=="]") {
-                        left:={type: "empty property syntax", value: left.value}
+                        left:={type:"empty property syntax",propertyName:left.value}
+                        doNotInclude:=1
+                        arrTypes.Push("emptyPropertySyntax")
+                        arrObj.Push(left)
                     } else {
                         left:={type: "array access", parent: left, key: value_expression()}
                         while ((char_:=SubStr(str, c_, 1))==",") {
@@ -1971,82 +1982,6 @@ walker_globalVars() {
                     globalFunctionIndices.Push(k_)
                 case "condition with block":
                     finalStr.=do(v_.expr) " "
-                case "loop statement":
-                    vBak:=v_
-                    if (v_.HasOwnProp("loopExtend")) {
-                        finalStr.="Loop " v_.loopExtend " "
-                    } else {
-                        finalStr.="loop "
-                    }
-                    finalStr.=getArgsArrStr(v_.argsArr)
-                    if (vBak.body.type == "block") {
-                        finalStr.=" "
-                        v_:=vBak.body
-                        withNewline()
-                        finalStr.="`n"
-                    } else {
-                        indent.="  "
-                        finalStr.="`n" indent
-                        v_:=vBak.body
-                        withNewline()
-                        indent:=SubStr(indent, 3)
-                    }
-                case "if statement":
-                    vBak:=v_
-                    insertElse() {
-                        finalStr.="else"
-                        if (vBak.ifFalse.type == "if statement" || vBak.ifFalse.type == "block") {
-                            finalStr.=" "
-                            v_:=vBak.ifFalse
-                            withNewline()
-                            if (vBak.ifFalse.type == "block") {
-                                finalStr.="`n"
-                            }
-                        } else {
-                            indent.="  "
-                            finalStr.="`n" indent
-                            v_:=vBak.ifFalse
-                            withNewline()
-                            indent:=SubStr(indent, 3)
-                        }
-                    }
-                    finalStr.="if " do(vBak.condition)
-                    if (vBak.ifTrue.type == "block") {
-                        finalStr.=" "
-                        v_:=vBak.ifTrue
-                        withNewline()
-                        if (vBak.HasOwnProp("ifFalse")) {
-                            finalStr.=" "
-                            insertElse()
-                        } else {
-                            finalStr.="`n"
-                        }
-                    } else {
-                        indent.="  "
-                        finalStr.="`n" indent
-                        v_:=vBak.ifTrue
-                        withNewline()
-                        indent:=SubStr(indent, 3)
-                        if (vBak.HasOwnProp("ifFalse")) {
-                            finalStr.=indent
-                            insertElse()
-                        }
-                    }
-                case "while statement":
-                    vBak:=v_
-                    finalStr.="while " do(vBak.condition)
-                    if (vBak.body.type == "block") {
-                        finalStr.=" "
-                        v_:=vBak.body
-                        withNewline()
-                        finalStr.="`n"
-                    } else {
-                        indent.="  "
-                        finalStr.="`n" indent
-                        v_:=vBak.body
-                        withNewline()
-                        indent:=SubStr(indent, 3)
-                    }
                 case "catch with block":
                     finalStr.="catch "
                     v_:=statements[++k_]
@@ -2236,205 +2171,19 @@ walker_replacer() {
 
         withNewline() {
             switch v_.type {
-                case "command":
-                    switch (v_._name), 0 {
-                        case "Gui":
-                            argsArr:=v_.args
-                            arg1 := argsArr.RemoveAt(1).value
-                            pos_colon := InStr(arg1, ":", true)
-                            if (pos_colon) {
-                                guiName:=SubStr(arg1, 1, pos_colon - 1)
-                                guiCommand:=SubStr(arg1, pos_colon + 1)
-                            } else {
-                                guiName:="myGui"
-                                guiCommand:=arg1
-                            }
-
-                            checkOptionsHwnd(optionsNode) {
-                                if (optionsNode.type == "string") {
-                                    RegExMatch(optionsNode.value, "i)\s*\+hwnd(\S*)", &OutputVar_hwnd:="")
-                                    if (OutputVar_hwnd) {
-                                        optionsNode.value:=SubStr(optionsNode.value, 1, OutputVar_hwnd.Pos - 1) SubStr(optionsNode.value, OutputVar_hwnd.Pos + OutputVar_hwnd.Len)
-                                        return OutputVar_hwnd.1
-                                    }
-                                }
-                                return false
-                            }
-                            if (!currentScope.Has(guiName)) {
-                                if (guiCommand="New") {
-                                    guiHwnd:=checkOptionsHwnd(argsArr[1])
-                                    if (guiHwnd) {
-                                        currentScope[guiHwnd]:={vartype:"Gui Hwnd",guiName:guiName}
-                                    }
-                                    newGuiArgs:=argsArr
-                                } else {
-                                    newGuiArgs:=[]
-                                }
-                                v_:={left:{type:"variable", value:guiName}, op:":=", right:{args:newGuiArgs, func:{type:"variable", value:"Gui"}, type:"function call"}, type:"binary"}
-                                if (guiCommand="New") {
-                                    statements[k_]:=v_
-                                    withNewline()
-                                } else {
-                                    statements.InsertAt(k_, v_)
-                                    withNewline()
-                                    k_++, statements_len++
-                                    v_:=statements[k_]
-                                }
-                            }
-                            switch (guiCommand), 0 {
-                                ; case "New":
-                                    ; checkOptionsHwnd(argsArr[1])
-                                case "Add":
-                                    control_hwnd:=checkOptionsHwnd(argsArr[2])
-                                    if (control_hwnd) {
-                                        v_:=statements[k_]:={left:{type:"variable", value:control_hwnd}, op:":=", right:{args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Add", type:"property access"}, type:"function call"}, type:"binary"}
-                                        withNewline()
-                                        currentScope[control_hwnd]:={vartype:"Gui Control Hwnd"}
-                                        return
-                                    }
-                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Add", type:"property access"}, type:"function call"}
-                                    withNewline()
-                                case "Show":
-                                    if (argsArr.Length == 2) {
-                                        v_:={left:{parent:{type:"variable", value:guiName}, propName:"Title", type:"property access"}, op:":=", right:argsArr.Pop(), type:"binary"}
-                                        statements.InsertAt(k_, v_)
-                                        withNewline()
-                                        k_++, statements_len++
-                                    }
-                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Show", type:"property access"}, type:"function call"}
-                                    withNewline()
-                                case "Submit":
-                                case "Cancel":
-                                case "Destroy":
-                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Destroy", type:"property access"}, type:"function call"}
-                                    withNewline()
-                                case "Font":
-                                    v_:=statements[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"SetFont", type:"property access"}, type:"function call"}
-                                    withNewline()
-                                case "Color":
-                                case "Margin":
-                                case "Options":
-                                case "Menu":
-                                case "Minimize":
-                                case "Flash":
-                                case "Default":
-                            }
-                            return
-                        case "IfEqual","IfNotEqual","IfLess","IfLessOrEqual","IfGreater","IfGreaterOrEqual":
-                            next:=statements[k_ + 1]
-                            if (next.type == "command") {
-                                statements[k_] := {type:"if without block"}
-                                k_++
-                                do(v_.args, 2) ;if there's a Line from File.ReadLine() -> Line "`n"
-                                switch (v_._name), 0 {
-                                    case "IfEqual":
-                                        op:="=="
-                                    case "IfNotEqual":
-                                        op:="!=="
-                                    case "IfLess":
-                                        op:="<"
-                                    case "IfLessOrEqual":
-                                        op:="<="
-                                    case "IfGreater":
-                                        op:=">"
-                                    case "IfGreaterOrEqual":
-                                        op:=">="
-                                }
-                                statements.InsertAt(k_, {type:"group",value:{type:"binary",op:op,left:v_.args[1],right:v_.args[2]}})
-                                k_++, statements_len++
-                                v_:=statements[k_]
-                                return
-                            }
-                        case "StringSplit":
-                            statements[k_] := {type:"binary",op:":=",left:v_.args.RemoveAt(1),right:{type:"function call",func:{type:"variable",value:"StrSplit"},args:v_.args}}
-                            outVarName:=statements[k_].left.value
-                            currentScope[outVarName]:={vartype:"StringSplit root"}
-                            currentScope[outVarName "%A_Index%"]:={vartype:"StringSplit Element"}
-                    }
-                    if (v_.args.Length) {
-                        finalStr.=v_._name " " do(v_.args, 1)
-                        i_:=2, len:=v_.args.Length + 1
-                        while (i_<len) {
-                            finalStr.=", " do(v_.args, i_)
-                            i_++
-                        }
-                    } else {
-                        finalStr.=v_._name
-                    }
-                    finalStr.="`n"
                 case "hotkey":
                     if (k_ + 1 <= statements.Length && statements[k_ + 1].type == "block") {
                         globalFunctionIndices.Push(k_ + 1)
                     }
                     finalStr.=v_.keyName
                 case "property access","array access","group","pre-unary", "post-unary assignment", "binary","function call", "ternary"
-                , "concat":
+                , "concat", "comma multi-statement", "command", "block"
+                , "if statement", "while statement", "for statement", "loop statement":
                     finalStr.=do(statements, k_) "`n"
-                case "comma multi-statement":
-                    doDo:=true
-                    t_:=v_
-                    o_:=v_
-                    commaStatementsCount:=2
-                    while (t_.left.type=="comma multi-statement") {
-                        o_:=t_
-                        t_:=t_.left
-                        ++commaStatementsCount
-                    }
-                    if (commaStatementsCount==2 && t_.left.type=="binary" && t_.left.op=="-=" && t_.right.type=="variable") {
-                        replacement:={left:t_.left.left,op:":=",right:{args:[t_.left.left,t_.left.right,{type:"string",value:t_.right.value}],func:{type:"variable",value:"DateDiff"},type:"function call"},type:"binary"}
-                        statements[k_]:=replacement
-                    } else if (t_.left.type=="command" && t_.left._name="return") {
-
-                        loop 1 {
-                            doDo:=false
-                            tempVar:=getNextTempVariable()
-                            retValBak:=t_.left.args[1]
-                            t_.left.args[1]:=tempVar
-                            if (o_==t_) {
-                                v_:=o_.right
-                            } else {
-                                o_.left := t_.right
-                            }
-                            if (statements.Length > 1 && k_ > 1 && statements[k_ - 1].type == "else without block") {
-                                statements[k_ - 1].type := "else with block"
-                            } else if (statements.Length > 1 && k_ > 1 && (statements[k_ - 1].type == "try without block" || (statements[k_ - 1].type=="command" && statements[k_ - 1]._name="try"))) {
-                                statements[k_ - 1] := {type:"try with block"}
-                            } else if (statements.Length > 1 && k_ > 1 && statements[k_ - 1].type == "catch without block") {
-                                statements[k_ - 1].type := "catch with block"
-                            } else if (statements.Length > 2 && k_ > 2 && statements[k_ - 2].type == "if without block") {
-                                statements[k_ - 2].type := "if with block"
-                                statements[k_ - 1] := {type: "condition with block",expr:statements[k_ - 1]}
-                            } else {
-                                statements[k_]:={left:tempVar,op:":=",right:retValBak,type:"binary"}
-                                statements.InsertAt(k_ + 1, v_, t_.left)
-                                statements_len+=2
-                                break
-                            }
-                            statements[k_]:={type:"block", statements: [{left:tempVar,op:":=",right:retValBak,type:"binary"}, v_, t_.left]}
-                            do_statements(statements[k_].statements)
-                        }
-                    }
-                    if (doDo) {
-                        finalStr.=do(statements, k_) "`n"
-                    }
                 case "var scope declaration":
                     finalStr.=v_.value " "
                     v_:=statements[++k_]
                     withNewline()
-                case "block":
-                    finalStr.="{`n"
-                    indent.="  "
-                    do_statements(v_.statements)
-                    indent:=SubStr(indent, 3)
-                    finalStr.=indent
-                    finalStr.="}`n"
-                case "block before else","block before catch":
-                    finalStr.="{`n"
-                    indent.="  "
-                    do_statements(v_.statements)
-                    indent:=SubStr(indent, 3)
-                    finalStr.=indent
-                    finalStr.="} "
                 case "class statement":
                     finalStr.="class " v_.className " "
                     currentScope:=Map()
@@ -2449,6 +2198,7 @@ walker_replacer() {
 
                     isStatic:=true
                     skipOne:=false
+                    hasSet:=false
                     for kk, possiblyFunc in vBak.body.statements {
                         if (skipOne) {
                             skipOne:=false
@@ -2469,6 +2219,7 @@ walker_replacer() {
                                         }
                                     case "__Set":
                                         ; `__Set(a, b)` -> `__Set(a, Params, b)`
+                                        hasSet:=true
                                         if (possiblyFunc.args.Length == 2) {
                                             possiblyFunc.args.InsertAt(2, {type:"variable",value:"Params"})
                                         }
@@ -2480,13 +2231,24 @@ walker_replacer() {
                                 switch (possiblyFunc.func.value), 0 {
                                     case "__Get":
                                         ; return this.GetOwnPropDesc(aName).value
-                                        ; possiblyFunc.body.statements
-                                        ; possiblyFunc.args.Push({type:"variable",value:"Params"})
+                                        if (!(possiblyFunc.body.statements.Length && possiblyFunc.body.statements[possiblyFunc.body.statements.Length].type == "command" && possiblyFunc.body.statements[possiblyFunc.body.statements.Length]._name == "return")) {
+                                            possiblyFunc.body.statements.Push({_name:"return",args:[{parent:{args:[possiblyFunc.args[1]],func:{parent:{type:"variable",value:"this"},propName:"GetOwnPropDesc",type:"property access"},type:"function call"},propName:"value",type:"property access"}],type:"command"})
+                                        }
                                     case "__Set":
                                         ; this.DefineProp(aName, { value: aVal })
+                                        if (!(possiblyFunc.body.statements.Length && possiblyFunc.body.statements[possiblyFunc.body.statements.Length].type == "command" && possiblyFunc.body.statements[possiblyFunc.body.statements.Length]._name == "return")) {
+                                            possiblyFunc.body.statements.Push({args:[possiblyFunc.args[1],{keys:[{type:"obj key",value:"value"}],type:"object",values:[possiblyFunc.args[3]]}],func:{parent:{type:"variable",value:"this"},propName:"DefineProp",type:"property access"},type:"function call"})
+                                        }
+                                }
+                            case "empty property syntax":
+                                functionScopes[functionScopes.Length]["this"].keys.push({propName:vBak.body.statements[kk].propertyName,varInfo:{vartype:"simply defined",possiblyFunc:vBak.body.statements[kk]}})
+                                for possiblyGetSet in vBak.body.statements[kk].body.statements {
+                                    if (possiblyGetSet.type=="property syntax get/set") {
+                                        do(possiblyGetSet,"body")
+                                    }
                                 }
                             case "comma multi-statement":
-                                do(statementsBak, kk)
+                                do(vBak.body.statements, kk)
                                 loop {
                                     functionScopes[functionScopes.Length]["this"].keys.push({propName:possiblyFunc.right.left.value,varInfo:{vartype:"simply defined",possiblyFunc:possiblyFunc.right.right}})
                                     if (!(possiblyFunc.left.type == "comma multi-statement")) {
@@ -2495,7 +2257,7 @@ walker_replacer() {
                                     possiblyFunc:=possiblyFunc.left
                                 }
                             case "binary":
-                                do(statementsBak, kk)
+                                do(vBak.body.statements, kk)
                                 functionScopes[functionScopes.Length]["this"].keys.push({propName:possiblyFunc.left.value,varInfo:{vartype:"simply defined",possiblyFunc:possiblyFunc.right}})
                             case "var scope declaration":
                                 if (possiblyFunc.value=="static") {
@@ -2511,6 +2273,22 @@ walker_replacer() {
                     k_:=kBak
                     v_:=vBak
                     statements:=statementsBak
+                    if (hasSet) {
+                        class_statements_len:=v_.body.statements.Length
+                        class_statements_idx:=class_statements_len
+                        while (class_statements_idx > 0) {
+                            possiblyFunc:=v_.body.statements[class_statements_idx]
+                            if (possiblyFunc.type == "empty property syntax") {
+                                for possiblyGetSet in possiblyFunc.body.statements {
+                                    if (possiblyGetSet.type=="property syntax get/set" && possiblyGetSet.which == "set") {
+                                        ; this.__Set("Source", [], value)
+                                        possiblyGetSet.body.statements.InsertAt(1,{args:[{type:"string",value:possiblyFunc.propertyName},{elements:[],type:"array"},{type:"variable",value:"value"}],func:{parent:{type:"variable",value:"this"},propName:"__Set",type:"property access"},type:"function call"})
+                                    }
+                                }
+                            }
+                            class_statements_idx--
+                        }
+                    }
                     if (isStatic) {
                         class_statements_len:=v_.body.statements.Length
                         class_statements_idx:=class_statements_len
@@ -2524,7 +2302,8 @@ walker_replacer() {
                     }
 
                     functionScopeNames.Pop()
-                    currentScope:=functionScopes.Pop()
+                    functionScopes.Pop()
+                    currentScope:=functionScopes[functionScopes.Length]
                 case "function definition":
                     currentScope:=Map()
                     currentScope.CaseSense:="Off"
@@ -2549,89 +2328,26 @@ walker_replacer() {
 
                     finalStr.=do(statements, k_) " "
 
-                    v_:=v_.body
-                    withNewline()
+                    do_statements(v_.body.statements)
 
                     functionScopeNames.Pop()
-                    currentScope:=functionScopes.Pop()
+                    functionScopes.Pop()
+                    currentScope:=functionScopes[functionScopes.Length]
+                case "property syntax get/set":
+                    currentScope:=Map()
+                    currentScope.CaseSense:="Off"
+                    functionScopes.Push(currentScope)
+                    functionScopeNames.Push(v_.func.value)
+
+                    finalStr.=do(statements, k_) " "
+
+                    do_statements(v_.body.statements)
+
+                    functionScopeNames.Pop()
+                    functionScopes.Pop()
+                    currentScope:=functionScopes[functionScopes.Length]
                 case "condition with block":
                     finalStr.=do(v_, "expr") " "
-                case "loop statement":
-                    vBak:=v_
-                    if (v_.HasOwnProp("loopExtend")) {
-                        finalStr.="Loop " v_.loopExtend " "
-                    } else {
-                        finalStr.="loop "
-                    }
-                    finalStr.=getArgsArrStr(v_.argsArr)
-                    if (vBak.body.type == "block") {
-                        finalStr.=" "
-                        v_:=vBak.body
-                        withNewline()
-                        finalStr.="`n"
-                    } else {
-                        indent.="  "
-                        finalStr.="`n" indent
-                        v_:=vBak.body
-                        withNewline()
-                        indent:=SubStr(indent, 3)
-                    }
-                case "if statement":
-                    vBak:=v_
-                    insertElse() {
-                        finalStr.="else"
-                        if (vBak.ifFalse.type == "if statement" || vBak.ifFalse.type == "block") {
-                            finalStr.=" "
-                            v_:=vBak.ifFalse
-                            withNewline()
-                            if (vBak.ifFalse.type == "block") {
-                                finalStr.="`n"
-                            }
-                        } else {
-                            indent.="  "
-                            finalStr.="`n" indent
-                            v_:=vBak.ifFalse
-                            withNewline()
-                            indent:=SubStr(indent, 3)
-                        }
-                    }
-                    finalStr.="if " do(vBak,"condition")
-                    if (vBak.ifTrue.type == "block") {
-                        finalStr.=" "
-                        v_:=vBak.ifTrue
-                        withNewline()
-                        if (vBak.HasOwnProp("ifFalse")) {
-                            finalStr.=" "
-                            insertElse()
-                        } else {
-                            finalStr.="`n"
-                        }
-                    } else {
-                        indent.="  "
-                        finalStr.="`n" indent
-                        v_:=vBak.ifTrue
-                        withNewline()
-                        indent:=SubStr(indent, 3)
-                        if (vBak.HasOwnProp("ifFalse")) {
-                            finalStr.=indent
-                            insertElse()
-                        }
-                    }
-                case "while statement":
-                    vBak:=v_
-                    finalStr.="while " do(vBak,"condition")
-                    if (vBak.body.type == "block") {
-                        finalStr.=" "
-                        v_:=vBak.body
-                        withNewline()
-                        finalStr.="`n"
-                    } else {
-                        indent.="  "
-                        finalStr.="`n" indent
-                        v_:=vBak.body
-                        withNewline()
-                        indent:=SubStr(indent, 3)
-                    }
                 case "catch with block":
                     finalStr.="catch "
                     v_:=statements[++k_]
@@ -2644,28 +2360,6 @@ walker_replacer() {
                     v_:=statements[++k_]
                     withNewline()
                     indent:=SubStr(indent, 3)
-                case "for statement":
-                    vBak:=v_
-                    currentScope[vBak.var1.value]:={vartype:"simply defined"}
-                    finalStr.="for " do(vBak,"var1")
-                    if (vBak.HasOwnProp("var2")) {
-                        currentScope[vBak.var2.value]:={vartype:"simply defined"}
-                        finalStr.=", " do(vBak,"var2")
-                    }
-                    finalStr.=" in " do(vBak,"expression")
-
-                    if (vBak.body.type == "block") {
-                        finalStr.=" "
-                        v_:=vBak.body
-                        withNewline()
-                        finalStr.="`n"
-                    } else {
-                        indent.="  "
-                        finalStr.="`n" indent
-                        v_:=vBak.body
-                        withNewline()
-                        indent:=SubStr(indent, 3)
-                    }
                 case "label":
                     finalStr.=v_.labelName ":`n"
             }
@@ -2730,6 +2424,241 @@ walker_replacer() {
                 return t_
             }
             switch t_.type {
+                case "if statement":
+                    tBak:=t_
+                    insertElse() {
+                        finalStr.="else"
+                        if (tBak.ifFalse.type == "if statement" || tBak.ifFalse.type == "block") {
+                            if (tBak.ifFalse.type == "block") {
+                                do_statements(tBak.ifFalse.statements)
+                            } else {
+                                do(tBak,"ifFalse")
+                            }
+                        } else {
+                            indent.="  "
+                            finalStr.="`n" indent
+                            v_:=tBak.ifFalse
+                            withNewline()
+                            indent:=SubStr(indent, 3)
+                        }
+                    }
+                    finalStr.="if " do(tBak,"condition")
+                    if (tBak.ifTrue.type == "block") {
+                        do_statements(tBak.ifTrue.statements)
+                        if (tBak.HasOwnProp("ifFalse")) {
+                            finalStr.=" "
+                            insertElse()
+                        } else {
+                            finalStr.="`n"
+                        }
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        do(tBak,"ifTrue")
+                        indent:=SubStr(indent, 3)
+                        if (tBak.HasOwnProp("ifFalse")) {
+                            finalStr.=indent
+                            insertElse()
+                        }
+                    }
+                    return
+                case "while statement":
+                    tBak:=t_
+                    finalStr.="while " do(tBak,"condition")
+                    if (tBak.body.type == "block") {
+                        do_statements(tBak.body.statements)
+                        finalStr.="`n"
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        do(tBak,"body")
+                        indent:=SubStr(indent, 3)
+                    }
+                    return
+                case "for statement":
+                    tBak:=t_
+                    currentScope[tBak.var1.value]:={vartype:"simply defined"}
+                    finalStr.="for " do(tBak,"var1")
+                    if (tBak.HasOwnProp("var2")) {
+                        currentScope[tBak.var2.value]:={vartype:"simply defined"}
+                        finalStr.=", " do(tBak,"var2")
+                    }
+                    finalStr.=" in " do(tBak,"expression")
+
+                    if (tBak.body.type == "block") {
+                        do_statements(tBak.body.statements)
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        do(tBak,"body")
+                        indent:=SubStr(indent, 3)
+                    }
+                    return
+                case "loop statement":
+                    tBak:=t_
+                    if (v_.HasOwnProp("loopExtend")) {
+                        finalStr.="Loop " v_.loopExtend " "
+                    } else {
+                        finalStr.="loop "
+                    }
+                    finalStr.=getArgsArrStr(v_.argsArr)
+                    if (tBak.body.type == "block") {
+                        do_statements(tBak.body.statements)
+                    } else {
+                        indent.="  "
+                        finalStr.="`n" indent
+                        do(tBak,"body")
+                        indent:=SubStr(indent, 3)
+                    }
+                    return
+                case "block":
+                    finalStr.="{`n"
+                    indent.="  "
+                    do_statements(t_.statements)
+                    indent:=SubStr(indent, 3)
+                    finalStr.=indent
+                    finalStr.="}`n"
+                    return
+                case "command":
+                    switch (t_._name), 0 {
+                        case "Gui":
+                            argsArr:=t_.args
+                            arg1Obj:=argsArr.RemoveAt(1)
+                            arg1 := arg1Obj.value
+                            pos_colon := InStr(arg1, ":", true)
+                            if (pos_colon) {
+                                guiName:=SubStr(arg1, 1, pos_colon - 1)
+                                guiCommand:=SubStr(arg1, pos_colon + 1)
+                            } else {
+                                guiName:="myGui"
+                                guiCommand:=arg1
+                            }
+
+                            checkOptionsHwnd(optionsNode) {
+                                if (optionsNode.type == "string") {
+                                    RegExMatch(optionsNode.value, "i)\s*\+hwnd(\S*)", &OutputVar_hwnd:="")
+                                    if (OutputVar_hwnd) {
+                                        optionsNode.value:=SubStr(optionsNode.value, 1, OutputVar_hwnd.Pos - 1) SubStr(optionsNode.value, OutputVar_hwnd.Pos + OutputVar_hwnd.Len)
+                                        return OutputVar_hwnd.1
+                                    }
+                                }
+                                return false
+                            }
+                            if (!currentScope.Has(guiName)) {
+                                if (guiCommand="New") {
+                                    guiHwnd:=checkOptionsHwnd(argsArr[1])
+                                    if (guiHwnd) {
+                                        currentScope[guiHwnd]:={vartype:"Gui Hwnd",guiName:guiName}
+                                    }
+                                    newGuiArgs:=argsArr
+                                } else {
+                                    newGuiArgs:=[]
+                                }
+                                v_:={left:{type:"variable", value:guiName}, op:":=", right:{args:newGuiArgs, func:{type:"variable", value:"Gui"}, type:"function call"}, type:"binary"}
+                                if (guiCommand="New") {
+                                    obj[k_]:=v_
+                                    withNewline()
+                                } else {
+                                    obj.InsertAt(k_, v_)
+                                    withNewline()
+                                    k_++, statements_len++
+                                    v_:=obj[k_]
+                                }
+                            }
+                            switch (guiCommand), 0 {
+                                ; case "New":
+                                    ; checkOptionsHwnd(argsArr[1])
+                                case "Add":
+                                    control_hwnd:=checkOptionsHwnd(argsArr[2])
+                                    if (control_hwnd) {
+                                        v_:=obj[k_]:={left:{type:"variable", value:control_hwnd}, op:":=", right:{args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Add", type:"property access"}, type:"function call"}, type:"binary"}
+                                        withNewline()
+                                        currentScope[control_hwnd]:={vartype:"Gui Control Hwnd"}
+                                        return
+                                    }
+                                    v_:=obj[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Add", type:"property access"}, type:"function call"}
+                                    withNewline()
+                                case "Show":
+                                    if (argsArr.Length == 2) {
+                                        v_:={left:{parent:{type:"variable", value:guiName}, propName:"Title", type:"property access"}, op:":=", right:argsArr.Pop(), type:"binary"}
+                                        obj.InsertAt(k_, v_)
+                                        withNewline()
+                                        k_++, statements_len++
+                                    }
+                                    v_:=obj[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Show", type:"property access"}, type:"function call"}
+                                    withNewline()
+                                case "Submit":
+                                case "Cancel":
+                                case "Destroy":
+                                    v_:=obj[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"Destroy", type:"property access"}, type:"function call"}
+                                    withNewline()
+                                case "Font":
+                                    v_:=obj[k_]:={args:argsArr, func:{parent:{type:"variable", value:guiName}, propName:"SetFont", type:"property access"}, type:"function call"}
+                                    withNewline()
+                                case "Color":
+                                case "Margin":
+                                case "Options":
+                                case "Menu":
+                                case "Minimize":
+                                case "Flash":
+                                case "Default":
+                                Default:
+                                    ; Gui, +/-Option1 +/-Option2 ...
+                                    ; Gui +LastFound
+                                    ; Gui, +HwndhGui
+                                    guiHwnd:=checkOptionsHwnd(arg1Obj)
+                                    if (guiHwnd) {
+                                        currentScope[guiHwnd]:={vartype:"Gui Hwnd",guiName:guiName}
+                                    }
+                                    if (arg1Obj.value=="") {
+                                        statements.RemoveAt(k_)
+                                        --k_, --statements_len
+                                    }
+                            }
+                            return
+                        case "IfEqual","IfNotEqual","IfLess","IfLessOrEqual","IfGreater","IfGreaterOrEqual":
+                            next:=obj[k_ + 1]
+                            if (next.type == "command") {
+                                obj[k_] := {type:"if without block"}
+                                k_++
+                                do(t_.args, 2) ;if there's a Line from File.ReadLine() -> Line "`n"
+                                switch (t_._name), 0 {
+                                    case "IfEqual":
+                                        op:="=="
+                                    case "IfNotEqual":
+                                        op:="!=="
+                                    case "IfLess":
+                                        op:="<"
+                                    case "IfLessOrEqual":
+                                        op:="<="
+                                    case "IfGreater":
+                                        op:=">"
+                                    case "IfGreaterOrEqual":
+                                        op:=">="
+                                }
+                                obj.InsertAt(k_, {type:"group",value:{type:"binary",op:op,left:t_.args[1],right:t_.args[2]}})
+                                k_++, statements_len++
+                                v_:=obj[k_]
+                                return
+                            }
+                        case "StringSplit":
+                            obj[k_] := {type:"binary",op:":=",left:t_.args.RemoveAt(1),right:{type:"function call",func:{type:"variable",value:"StrSplit"},args:t_.args}}
+                            outVarName:=obj[k_].left.value
+                            currentScope[outVarName]:={vartype:"StringSplit root"}
+                            currentScope[outVarName "%A_Index%"]:={vartype:"StringSplit Element"}
+                    }
+                    if (t_.args.Length) {
+                        finalStr.=t_._name " " do(t_.args, 1)
+                        i_:=2, len:=t_.args.Length + 1
+                        while (i_<len) {
+                            finalStr.=", " do(t_.args, i_)
+                            i_++
+                        }
+                    } else {
+                        finalStr.=t_._name
+                    }
+                    finalStr.="`n"
+                    return
                 case "command empty arg", "function call empty arg":
                     return ""
                 case "variable":
@@ -3086,7 +3015,44 @@ walker_replacer() {
                     }
                     return doNotTouchLeft " " t_.op " " doNotTouchRight
                 case "comma multi-statement":
-                    return do(t_, "left") ", " do(t_, "right")
+                    doDo:=true
+                    o_:=t_
+                    commaStatementsCount:=2
+                    while (t_.left.type=="comma multi-statement") {
+                        o_:=t_
+                        t_:=t_.left
+                        ++commaStatementsCount
+                    }
+                    if (commaStatementsCount==2 && t_.left.type=="binary" && t_.left.op=="-=" && t_.right.type=="variable") {
+                        replacement:={left:t_.left.left,op:":=",right:{args:[t_.left.left,t_.left.right,{type:"string",value:t_.right.value}],func:{type:"variable",value:"DateDiff"},type:"function call"},type:"binary"}
+                        statements[k_]:=replacement
+                    } else if (t_.left.type=="command" && t_.left._name="return") {
+
+                        loop 1 {
+                            doDo:=false
+                            tempVar:=getNextTempVariable()
+                            retValBak:=t_.left.args[1]
+                            t_.left.args[1]:=tempVar
+                            if (o_==t_) {
+                                v_:=o_.right
+                            } else {
+                                o_.left := t_.right
+                            }
+                            if (Type(obj) == "Object") {
+                                replacement:={type:"block",statements:[{left:tempVar,op:":=",right:retValBak,type:"binary"},v_,t_.left]}
+                                obj.%key%:=replacement
+                                do_statements(replacement.statements)
+                            } else {
+                                statements[k_]:={left:tempVar,op:":=",right:retValBak,type:"binary"}
+                                statements.InsertAt(k_ + 1, v_, t_.left)
+                                statements_len+=2
+                            }
+                            return
+                        }
+                    }
+                    if (doDo) {
+                        return do(t_, "left") ", " do(t_, "right")
+                    }
                 case "ternary":
                     ; A_PtrSize ? "UPtr" : "UInt" -> "Ptr"
                     ; A_PtrSize ? "UPtr*" : "UInt*" -> "Ptr*"
@@ -3422,25 +3388,27 @@ walker_replacer() {
                             }
                             if (varInfo.vartype=="class this") {
                                 keyLen:=keysPath.Length
-                                while (keyLen) {
-                                    if (varInfo.vartype!=="class this") {
-                                        break outer4
-                                    }
-                                    outer3:
-                                    loop 1 {
-                                        for key in varInfo.keys {
-                                            if (key.propName=keysPath[keyLen]) {
-                                                varInfo:=key.varInfo
-                                                break outer3
-                                            }
+                                if (keyLen) {
+                                    while (keyLen) {
+                                        if (varInfo.vartype!=="class this") {
+                                            break outer4
                                         }
-                                        ; MsgBox "keyNotFound function declaration"
-                                        break outer4
+                                        outer3:
+                                        loop 1 {
+                                            for key in varInfo.keys {
+                                                if (key.propName=keysPath[keyLen]) {
+                                                    varInfo:=key.varInfo
+                                                    break outer3
+                                                }
+                                            }
+                                            ; MsgBox "keyNotFound function declaration"
+                                            break outer4
+                                        }
+                                        --keyLen
                                     }
-                                    --keyLen
-                                }
-                                while (t_.args.Length > varInfo.possiblyFunc.args.Length) {
-                                    t_.args.Pop()
+                                    while (t_.args.Length > varInfo.possiblyFunc.args.Length) {
+                                        t_.args.Pop()
+                                    }
                                 }
                             }
                         }
@@ -3938,7 +3906,8 @@ walker_undefinedVars() {
             }
 
 
-            currentScope:=functionScopes.Pop()
+            functionScopes.Pop()
+            currentScope:=functionScopes[functionScopes.Length]
         }
     }
 
@@ -3987,6 +3956,16 @@ what() {
                     indent:=SubStr(indent, 3)
                     finalStr.=indent
                     finalStr.="}"
+                case "property syntax get/set":
+                    finalStr.=v_.which " "
+                    v_:=v_.body
+                    withNewline()
+                    finalStr.="`n"
+                case "empty property syntax":
+                    finalStr.=v_.propertyName " "
+                    v_:=v_.body
+                    withNewline()
+                    finalStr.="`n"
                 case "class statement":
                     finalStr.="class " v_.className " "
                     v_:=v_.body
@@ -4455,16 +4434,15 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("Biga.ahk"))
 ; bbb:=aaa(FileRead("tooManyArgs.ahk"))
 ; bbb:=aaa(FileRead("while i goes to 1.ahk"))
-; bbb:=aaa(FileRead("LiveThumb.ahk"))
-; bbb:=aaa(FileRead("class get set.ahk"))
+bbb:=aaa(FileRead("LiveThumb.ahk"))
 ; bbb:=aaa(FileRead("if array access.ahk"))
-bbb:=aaa(FileRead("if statement.ahk"))
+; bbb:=aaa(FileRead("if statement.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
 ; d currentArr
-; MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
-MsgBox A_Clipboard:=JSON_stringify(bbb.currentArr)
+MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
+; MsgBox A_Clipboard:=JSON_stringify(bbb.currentArr)
 A_Clipboard:=bbb.converted
 
 
