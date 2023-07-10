@@ -1097,6 +1097,7 @@ AHK_parse(str) {
         ; aa%v% -> "aa" v
         ; aa%v%aa -> "aa" v "aa"
         ; aa%v%aa%v%aa -> "aa" v "aa" v "aa"
+        str:=StrReplace(str, "`"", "`"`"", true)
         str:="`"" RegExReplace(str,"%(.*?)%", "`" $1 `"") "`""
         str:=RegExReplace(str,"^`"`" | `"`"$")
         return parse_expression(str)
@@ -4434,15 +4435,16 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("Biga.ahk"))
 ; bbb:=aaa(FileRead("tooManyArgs.ahk"))
 ; bbb:=aaa(FileRead("while i goes to 1.ahk"))
-bbb:=aaa(FileRead("LiveThumb.ahk"))
+; bbb:=aaa(FileRead("LiveThumb.ahk"))
 ; bbb:=aaa(FileRead("if array access.ahk"))
 ; bbb:=aaa(FileRead("if statement.ahk"))
+bbb:=aaa(FileRead("v1str_quotes.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
 ; d currentArr
-MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
-; MsgBox A_Clipboard:=JSON_stringify(bbb.currentArr)
+; MsgBox A_Clipboard:=anti_JSON_stringify(bbb.currentArr)
+MsgBox A_Clipboard:=JSON_stringify(bbb.currentArr)
 A_Clipboard:=bbb.converted
 
 

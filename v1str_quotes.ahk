@@ -1,0 +1,3 @@
+RunWait, "pdfstamp.exe -PDF "%support_files%\Posting Script\Files\Templates\Cover-EOB.pdf" -O "%A_desktop%\temp.pdf" -AT "Print Date: %PrintDate%" -fn"200" -fs"20" -p"3" -MLR"-20" -MTB"20", % "C:\Users\" A_UserName "\Google Drive\LDT\Scripts\Tools\Very-PDF-Stamp\Files and Examples\", Hide
+MsgBox "pdfstamp.exe -PDF "%support_files%\Posting Script\Files\Templates\Cover-EOB.pdf" -O "%A_desktop%\temp.pdf" -AT "Print Date: %PrintDate%" -fn"200" -fs"20" -p"3" -MLR"-20" -MTB"20"
+#Hotstring EndChars -()[]{}':;"/\,.?!`n `t
