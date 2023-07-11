@@ -104,6 +104,11 @@ AHK_parse(str) {
                         case "function call":
                             currentArr[currentArr.Length].type:="function definition"
                             currentArr[currentArr.Length].body:={type:"block", statements:statements:=[]}
+                            for arg in currentArr[currentArr.Length].args {
+                                if (arg.type == "concat" && arg.left.type == "variable" && arg.left.value = "Byref") {
+                                    currentArr[currentArr.Length].args[A_Index] := {type:"v2 pre-unary", op:"&", right:arg.right}
+                                }
+                            }
                             arrTypesArr.Push(arrTypes,arrObj)
                             arrTypes:=["",""]
                             arrObj:=["",""]
@@ -557,7 +562,7 @@ AHK_parse(str) {
                 ,"Goto","Critical", "DetectHiddenWindows","SetTitleMatchMode","Click"
                 ,"FileDelete":
                     boolArr:=[3]
-                case "CoordMode","UrlDownloadToFile":
+                case "CoordMode","UrlDownloadToFile","SetFormat":
                     boolArr:=[2,3]
                 case "ToolTip":
                     boolArr:=[2,0,0,0]
@@ -801,6 +806,8 @@ AHK_parse(str) {
                     arrTypes.Push("propertySyntaxGetSet")
                     arrObj.Push(currentArr[currentArr.Length])
                     return
+                case "SysGet":
+                    boolArr:=[0,2,3]
                 default:
                     if (pos:=InStr(OutputVar_comments.0, "`n", true)) {
                         c1:=c_ + pos - 1
@@ -1023,6 +1030,25 @@ AHK_parse(str) {
             case "Random":
                 currentArr.Push({type: "binary", op: ":=", left:argsArr.RemoveAt(1), right: {type: "function call", func: {type:"variable"
                 , value:"Random"}, args: argsArr}})
+            case "SysGet":
+                switch (argsArr[2].value), 0 {
+                    case "Monitor":
+                        if (argsArr[3].type == "string" && IsInteger(argsArr[3].value)) {
+                            argsArr[2].type := "number"
+                        }
+                        currentArr.Push({_name:"MonitorGet",args:[argsArr[3]
+                        ,{type:"v2 pre-unary",op:"&",right:{type:"variable",value:argsArr[1].value "Left"}}
+                        ,{type:"v2 pre-unary",op:"&",right:{type:"variable",value:argsArr[1].value "Top"}}
+                        ,{type:"v2 pre-unary",op:"&",right:{type:"variable",value:argsArr[1].value "Right"}}
+                        ,{type:"v2 pre-unary",op:"&",right:{type:"variable",value:argsArr[1].value "Bottom"}}
+                        ],type:"command"})
+                    default:
+                        if (IsInteger(argsArr[2].value)) {
+                            argsArr[2].type := "number"
+                        }
+                        currentArr.Push({type: "binary", op: ":=", left:argsArr.RemoveAt(1), right: {type: "function call", func: {type:"variable"
+                        , value:"SysGet"}, args: argsArr}})
+                }
             case "FileRead":
                 ; todo: *t -> `n
                 ; todo: *m1024 -> m1024
@@ -1085,6 +1111,7 @@ AHK_parse(str) {
                     argsArr[1].value:="0.5"
                 }
                 add_command("ClipWait", argsArr)
+            case "SetFormat":
             default:
                 add_command(OutputVar_varName.0, argsArr)
 
@@ -2322,6 +2349,15 @@ walker_replacer() {
                                 addToScope(v_.args, argIdx, {vartype:"simply defined"})
                             case "variadic":
                                 addToScope(e_, "left", {vartype:"simply defined"})
+                            case "v2 pre-unary":
+                                switch e_.right.type {
+                                    case "binary":
+                                        addToScope(e_.right, "left", {vartype:"simply defined"})
+                                    case "variable":
+                                        addToScope(e_, "right", {vartype:"simply defined"})
+                                    default:
+                                        MsgBox "Parameter not anything jogijreoi893"
+                                }
                             default:
                                 MsgBox "Parameter not anything jitj430j043j"
                         }
@@ -2647,6 +2683,15 @@ walker_replacer() {
                             outVarName:=obj[k_].left.value
                             currentScope[outVarName]:={vartype:"StringSplit root"}
                             currentScope[outVarName "%A_Index%"]:={vartype:"StringSplit Element"}
+                            currentScope[outVarName "%" outVarName "0%"]:={vartype:"StringSplit Last",varVal:outVarName}
+                        case "SendMessage":
+                            ; SendMessage, ... -> ErrorLevel:=SendMessage(...)
+                            replacement:={left:{type:"variable",value:"ErrorLevel"},op:":=",right:{args:t_.args,func:{type:"variable",value:"SendMessage"},type:"function call"},type:"binary"}
+                            if (Type(obj) == "Object") {
+                                obj.%key%:=replacement
+                            } else {
+                                obj[key]:=replacement
+                            }
                     }
                     if (t_.args.Length) {
                         finalStr.=t_._name " " do(t_.args, 1)
@@ -2713,6 +2758,15 @@ walker_replacer() {
                                         case "StringSplit Element":
                                             ; r%A_Index% -> r[A_Index]
                                             replacement:={type:"array access",parent:{type:"variable",value:SubStr(t_.value,1,-9)},key:{type:"variable",value:"A_Index"}}
+                                            if (Type(obj) == "Object") {
+                                                obj.%key%:=replacement
+                                            } else {
+                                                obj[key]:=replacement
+                                            }
+                                        case "StringSplit Last":
+                                            ; r%r0% -> r[r.Length]
+                                            ; could more general with: r%$1% -> r[do($1)]
+                                            replacement:={type:"array access",parent:{type:"variable",value:varInfo.varVal},key:{type:"property access",parent:{type:"variable",value:varInfo.varVal},propName:"Length"}}
                                             if (Type(obj) == "Object") {
                                                 obj.%key%:=replacement
                                             } else {
@@ -3017,6 +3071,7 @@ walker_replacer() {
                     return doNotTouchLeft " " t_.op " " doNotTouchRight
                 case "comma multi-statement":
                     doDo:=true
+                    tBak:=t_
                     o_:=t_
                     commaStatementsCount:=2
                     while (t_.left.type=="comma multi-statement") {
@@ -3052,7 +3107,7 @@ walker_replacer() {
                         }
                     }
                     if (doDo) {
-                        return do(t_, "left") ", " do(t_, "right")
+                        return do(tBak, "left") ", " do(tBak, "right")
                     }
                 case "ternary":
                     ; A_PtrSize ? "UPtr" : "UInt" -> "Ptr"
@@ -3412,6 +3467,13 @@ walker_replacer() {
                                     }
                                 }
                             }
+                            if (varInfo.HasOwnProp("possiblyFunc")) {
+                                for arg in t_.args {
+                                    if (varInfo.possiblyFunc.args[A_Index].type == "v2 pre-unary") {
+                                        t_.args[A_Index] := {type:"v2 pre-unary",op:"&",right:t_.args[A_Index]}
+                                    }
+                                }
+                            }
                         }
 
                     }
@@ -3509,6 +3571,15 @@ walker_undefinedVars() {
                             currentScope[param.value]:={vartype:"simply defined"}
                         case "binary", "variadic":
                             currentScope[param.left.value]:={vartype:"simply defined"}
+                        case "v2 pre-unary":
+                            switch param.right.type {
+                                case "binary":
+                                    currentScope[param.right.left.value]:={vartype:"simply defined"}
+                                case "variable":
+                                    currentScope[param.right.value]:={vartype:"simply defined"}
+                                default:
+                                    MsgBox "Parameter not anything fwenhuh3289"
+                            }
                         default:
                             MsgBox "Parameter not anything fjwe09fj93"
                     }
@@ -3745,7 +3816,10 @@ walker_undefinedVars() {
                                             undefinedVarsMap[t_.value]:={name:t_.value,guessType:"number"}
                                         } else {
                                             if (!undefinedVarsMap.Has(t_.value)) {
-                                                undefinedVarsMap[t_.value]:={name:t_.value,guessType:"string"}
+                                                if (Type(obj) == "Object" && obj.type == "function call") {
+                                                } else {
+                                                    undefinedVarsMap[t_.value]:={name:t_.value,guessType:"string"}
+                                                }
                                             }
                                         }
                                         break outer
@@ -4438,7 +4512,10 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("LiveThumb.ahk"))
 ; bbb:=aaa(FileRead("if array access.ahk"))
 ; bbb:=aaa(FileRead("if statement.ahk"))
-bbb:=aaa(FileRead("v1str_quotes.ahk"))
+; bbb:=aaa(FileRead("v1str_quotes.ahk"))
+; bbb:=aaa(FileRead("CGdipSnapshot.ahk"))
+; bbb:=aaa(FileRead("Gdip_all.ahk"))
+bbb:=aaa(FileRead("byref.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
