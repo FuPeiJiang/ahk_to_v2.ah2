@@ -780,7 +780,7 @@ AHK_parse(str) {
                     }
                 case "SplitPath":
                     boolArr:=[0,1,1,1,1,1]
-                case "Sort","FileRead":
+                case "Sort","FileRead","FileGetVersion":
                     boolArr:=[0,3]
                 case "Random","StringTrimLeft","StringTrimRight":
                     boolArr:=[0,0,0]
@@ -1030,6 +1030,9 @@ AHK_parse(str) {
             case "Random":
                 currentArr.Push({type: "binary", op: ":=", left:argsArr.RemoveAt(1), right: {type: "function call", func: {type:"variable"
                 , value:"Random"}, args: argsArr}})
+            case "FileGetVersion":
+                currentArr.Push({type: "binary", op: ":=", left:argsArr.RemoveAt(1), right: {type: "function call", func: {type:"variable"
+                , value:"FileGetVersion"}, args: argsArr}})
             case "SysGet":
                 switch (argsArr[2].value), 0 {
                     case "Monitor":
@@ -1839,6 +1842,7 @@ superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"A_OSVersion",{vartype:"simply defined"}
     ,"A_ScreenWidth",{vartype:"simply defined"}
     ,"A_ScreenHeight",{vartype:"simply defined"}
+    ,"A_WinDir",{vartype:"simply defined"}
     ,"ErrorLevel",{vartype:"simply defined"}
     ; deprecated
     ,"A_StringCaseSense",{vartype:"simply defined"}
@@ -1871,6 +1875,7 @@ superGlobalVarsMap.Set("A_ScriptDir", {vartype:"simply defined"}
     ,"StrSplit",{vartype:"simply defined"}
     ,"Type",{vartype:"simply defined"}
     ,"Sort",{vartype:"simply defined"}
+    ,"FileGetVersion",{vartype:"simply defined"}
     ,"StrTitle",{vartype:"simply defined"}
     ,"StrUpper",{vartype:"simply defined"}
     ,"StrLower",{vartype:"simply defined"}
@@ -3242,7 +3247,9 @@ walker_replacer() {
 
                                 case "RegisterCallback":
                                     t_.func.value:="CallbackCreate"
-                                    t_.args[1]:=string_to_variable_or_prop(t_.args[1].value)
+                                    if (t_.args[1].type=="string") {
+                                        t_.args[1]:=string_to_variable_or_prop(t_.args[1].value)
+                                    }
                                 case "InStr":
                                     if (t_.args.Length >= 3 && t_.args[3].type == "function call empty arg") {
                                         t_.args[3]:={type:"variable", value:"false"}
@@ -4475,7 +4482,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa("if(true){}else{}")
 ; bbb:=aaa(FileRead("switch.ahk"))
 ; bbb:=aaa(FileRead("switch2.ahk"))
-; bbb:=aaa(FileRead("_VD.ahk"))
+ bbb:=aaa(FileRead("_VD.ahk"))
 ; bbb:=aaa("VarSetCapacity(v,2)`na:=&v+2`na:=2+&v")
 ; bbb:=aaa("[::MsgBox hello")
 ; bbb:=aaa("* & a::MsgBox hello")
@@ -4515,7 +4522,7 @@ if (IsSet(__scintilla__)) {
 ; bbb:=aaa(FileRead("v1str_quotes.ahk"))
 ; bbb:=aaa(FileRead("CGdipSnapshot.ahk"))
 ; bbb:=aaa(FileRead("Gdip_all.ahk"))
-bbb:=aaa(FileRead("byref.ahk"))
+;bbb:=aaa(FileRead("byref.ahk"))
 ; bbb:=aaa(A_Clipboard)
 
 
